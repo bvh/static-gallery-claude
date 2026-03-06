@@ -6,7 +6,13 @@ from static_gallery.model import Node, NodeType
 
 
 PAGE_TEMPLATE = "<html><head><title>{{ page.title }}</title></head><body>{{ content }}</body></html>"
-IMAGE_TEMPLATE = "<html><head><title>{{ page.title }}</title></head><body><img src=\"{{ content }}\"></body></html>"
+IMAGE_TEMPLATE = '<html><head><title>{{ page.title }}</title></head><body><img src="{{ content }}"></body></html>'
+
+
+SHORTCODE_IMAGE_TEMPLATE = '<img src="{{ path }}" alt="{{ alt }}">'
+SHORTCODE_CODE_TEMPLATE = (
+    '<pre><code class="language-{{ language }}">{{ content }}</code></pre>'
+)
 
 
 def _setup_theme(source, page=PAGE_TEMPLATE, image=IMAGE_TEMPLATE):
@@ -14,6 +20,10 @@ def _setup_theme(source, page=PAGE_TEMPLATE, image=IMAGE_TEMPLATE):
     theme.mkdir(parents=True, exist_ok=True)
     (theme / "page.html").write_text(page)
     (theme / "image.html").write_text(image)
+    sc = theme / "shortcodes"
+    sc.mkdir(exist_ok=True)
+    (sc / "image.html").write_text(SHORTCODE_IMAGE_TEMPLATE)
+    (sc / "code.html").write_text(SHORTCODE_CODE_TEMPLATE)
 
 
 def _site_config():
@@ -274,6 +284,7 @@ class TestShortcodeIntegration:
         target.mkdir()
         _setup_theme(source)
 
+        (source / "photo.jpg").write_bytes(b"fake image")
         md_file = source / "post.md"
         md_file.write_text("Title: Post\n\nHere is <<photo.jpg>>.")
 
@@ -284,6 +295,26 @@ class TestShortcodeIntegration:
 
         output = (target / "post.html").read_text()
         assert '<img src="photo.jpg"' in output
+
+    def test_code_shortcode_in_markdown(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source)
+
+        (source / "example.py").write_text("print('hello')")
+        md_file = source / "post.md"
+        md_file.write_text("Title: Post\n\n<<example.py>>")
+
+        tree = _make_tree(
+            _make_child(NodeType.MARKDOWN, "post", md_file),
+        )
+        build(tree, _site_config(), source, target)
+
+        output = (target / "post.html").read_text()
+        assert "language-python" in output
+        assert "print(" in output
 
 
 class TestBuildErrors:
@@ -338,7 +369,7 @@ class TestBuildErrors:
 # Mtime helpers: set all source files to a "past" time, then selectively
 # advance specific files to test incremental logic.
 
-PAST = 1_000_000_000.0   # 2001-09-09
+PAST = 1_000_000_000.0  # 2001-09-09
 FUTURE = 2_000_000_000.0  # 2033-05-18
 
 
@@ -348,7 +379,7 @@ def _set_mtime(path, t):
 
 def _set_theme_mtime(source, t):
     theme = source / ".theme"
-    for f in theme.iterdir():
+    for f in theme.rglob("*"):
         if f.is_file():
             _set_mtime(f, t)
 
@@ -427,7 +458,7 @@ class TestIncrementalBuild:
         # Touch template — HTML should rebuild, asset should not
         _set_mtime(source / ".theme" / "image.html", FUTURE)
         build(tree, _site_config(), source, target, config_path=conf)
-        assert html.stat().st_mtime > PAST + 500   # HTML rebuilt
+        assert html.stat().st_mtime > PAST + 500  # HTML rebuilt
         assert asset.stat().st_mtime == PAST + 500  # asset untouched
 
     def test_rebuild_html_on_config_change(self, tmp_path):

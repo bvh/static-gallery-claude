@@ -120,10 +120,19 @@ def _build_node(
             _build_markdown(node, html_target, site_config, env)
     elif node.node_type == NodeType.IMAGE:
         skip_html = _is_up_to_date(html_target, node.source, global_mtime, is_html=True)
-        skip_asset = _is_up_to_date(asset_target, node.source, global_mtime, is_html=False)
+        skip_asset = _is_up_to_date(
+            asset_target, node.source, global_mtime, is_html=False
+        )
         if not skip_html or not skip_asset:
-            _build_image(node, html_target, asset_target, site_config, env,
-                         skip_html=skip_html, skip_asset=skip_asset)
+            _build_image(
+                node,
+                html_target,
+                asset_target,
+                site_config,
+                env,
+                skip_html=skip_html,
+                skip_asset=skip_asset,
+            )
     elif node.node_type == NodeType.STATIC:
         if not _is_up_to_date(asset_target, node.source, global_mtime, is_html=False):
             _build_static(node, asset_target)
@@ -153,7 +162,7 @@ def _build_markdown(
         raise GalleryError(f"Cannot read {node.source}: {exc}")
 
     metadata, body = parse_front_matter(text)
-    body = expand_shortcodes(body)
+    body = expand_shortcodes(body, env, node.source.parent)
     html_content = mistletoe.markdown(body)
 
     template_type = metadata.get("type", "page")
@@ -161,7 +170,9 @@ def _build_markdown(
         del metadata["type"]
     template = _load_template(env, template_type)
 
-    output = template.render(site=site_config, page=metadata, content=Markup(html_content))
+    output = template.render(
+        site=site_config, page=metadata, content=Markup(html_content)
+    )
 
     html_target.parent.mkdir(parents=True, exist_ok=True)
     try:
