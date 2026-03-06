@@ -1,3 +1,4 @@
+import os
 import pytest
 import subprocess
 import sys
@@ -150,3 +151,42 @@ class TestCLIIntegration:
         )
         assert result.returncode == 0
         assert (source / ".public" / "index.html").exists()
+
+    def test_force_flag(self, tmp_path):
+        source = tmp_path / "site"
+        source.mkdir()
+        _make_site(source)
+        (source / "index.md").write_text("Title: Home\n\nHi.")
+
+        target = source / ".public"
+
+        # First build
+        subprocess.run(
+            [sys.executable, "-m", "static_gallery", "--source", str(source)],
+            capture_output=True, text=True,
+        )
+        html = target / "index.html"
+        assert html.exists()
+
+        # Set output to a known past time
+        past = 1_000_000_000.0
+        os.utime(html, (past, past))
+        os.utime(source / "index.md", (past, past))
+        os.utime(source / "site.conf", (past, past))
+        for f in (source / ".theme").iterdir():
+            os.utime(f, (past, past))
+
+        # Rebuild without --force: should skip (mtime unchanged)
+        subprocess.run(
+            [sys.executable, "-m", "static_gallery", "--source", str(source)],
+            capture_output=True, text=True,
+        )
+        assert html.stat().st_mtime == past
+
+        # Rebuild with --force: should rewrite
+        result = subprocess.run(
+            [sys.executable, "-m", "static_gallery", "--source", str(source), "--force"],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0
+        assert html.stat().st_mtime > past

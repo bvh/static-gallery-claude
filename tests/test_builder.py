@@ -1,5 +1,5 @@
+import os
 import pytest
-from pathlib import Path
 from static_gallery.builder import build
 from static_gallery.errors import GalleryError
 from static_gallery.model import Node, NodeType
@@ -313,3 +313,181 @@ class TestBuildErrors:
         )
         with pytest.raises(GalleryError):
             build(tree, _site_config(), source, target)
+
+
+# Mtime helpers: set all source files to a "past" time, then selectively
+# advance specific files to test incremental logic.
+
+PAST = 1_000_000_000.0   # 2001-09-09
+FUTURE = 2_000_000_000.0  # 2033-05-18
+
+
+def _set_mtime(path, t):
+    os.utime(path, (t, t))
+
+
+def _set_theme_mtime(source, t):
+    theme = source / ".theme"
+    for f in theme.iterdir():
+        if f.is_file():
+            _set_mtime(f, t)
+
+
+class TestIncrementalBuild:
+    def _setup(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source)
+        conf = source / "site.conf"
+        conf.write_text("title: Test\n")
+        return source, target, conf
+
+    def test_skip_unchanged_markdown(self, tmp_path):
+        source, target, conf = self._setup(tmp_path)
+        md = source / "index.md"
+        md.write_text("Title: Home\n\nHello.")
+        _set_mtime(md, PAST)
+        _set_theme_mtime(source, PAST)
+        _set_mtime(conf, PAST)
+
+        root = _make_tree()
+        root.node_type = NodeType.MARKDOWN
+        root.source = md
+
+        # First build
+        build(root, _site_config(), source, target, config_path=conf)
+        html = target / "index.html"
+        assert html.exists()
+        # Set output to a known time so we can detect writes
+        _set_mtime(html, PAST + 500)
+
+        # Second build — source unchanged
+        build(root, _site_config(), source, target, config_path=conf)
+        assert html.stat().st_mtime == PAST + 500  # not rewritten
+
+    def test_rebuild_on_source_change(self, tmp_path):
+        source, target, conf = self._setup(tmp_path)
+        md = source / "index.md"
+        md.write_text("Title: Home\n\nHello.")
+        _set_mtime(md, PAST)
+        _set_theme_mtime(source, PAST)
+        _set_mtime(conf, PAST)
+
+        root = _make_tree()
+        root.node_type = NodeType.MARKDOWN
+        root.source = md
+
+        build(root, _site_config(), source, target, config_path=conf)
+        html = target / "index.html"
+        _set_mtime(html, PAST + 500)
+
+        # Touch source file to be newer than target
+        _set_mtime(md, FUTURE)
+        build(root, _site_config(), source, target, config_path=conf)
+        assert html.stat().st_mtime > PAST + 500  # was rewritten
+
+    def test_rebuild_html_on_template_change(self, tmp_path):
+        source, target, conf = self._setup(tmp_path)
+        img = source / "photo.jpg"
+        img.write_bytes(b"fake")
+        _set_mtime(img, PAST)
+        _set_theme_mtime(source, PAST)
+        _set_mtime(conf, PAST)
+
+        tree = _make_tree(_make_child(NodeType.IMAGE, "photo", img))
+        build(tree, _site_config(), source, target, config_path=conf)
+
+        html = target / "photo.html"
+        asset = target / "photo.jpg"
+        _set_mtime(html, PAST + 500)
+        _set_mtime(asset, PAST + 500)
+
+        # Touch template — HTML should rebuild, asset should not
+        _set_mtime(source / ".theme" / "image.html", FUTURE)
+        build(tree, _site_config(), source, target, config_path=conf)
+        assert html.stat().st_mtime > PAST + 500   # HTML rebuilt
+        assert asset.stat().st_mtime == PAST + 500  # asset untouched
+
+    def test_rebuild_html_on_config_change(self, tmp_path):
+        source, target, conf = self._setup(tmp_path)
+        md = source / "index.md"
+        md.write_text("Title: Home\n\nHello.")
+        _set_mtime(md, PAST)
+        _set_theme_mtime(source, PAST)
+        _set_mtime(conf, PAST)
+
+        root = _make_tree()
+        root.node_type = NodeType.MARKDOWN
+        root.source = md
+
+        build(root, _site_config(), source, target, config_path=conf)
+        html = target / "index.html"
+        _set_mtime(html, PAST + 500)
+
+        # Touch config
+        _set_mtime(conf, FUTURE)
+        build(root, _site_config(), source, target, config_path=conf)
+        assert html.stat().st_mtime > PAST + 500
+
+    def test_skip_unchanged_static(self, tmp_path):
+        source, target, conf = self._setup(tmp_path)
+        css = source / "style.css"
+        css.write_text("body{}")
+        _set_mtime(css, PAST)
+        _set_theme_mtime(source, PAST)
+        _set_mtime(conf, PAST)
+
+        tree = _make_tree(_make_child(NodeType.STATIC, "style", css))
+        build(tree, _site_config(), source, target, config_path=conf)
+
+        out = target / "style.css"
+        _set_mtime(out, PAST + 500)
+
+        build(tree, _site_config(), source, target, config_path=conf)
+        assert out.stat().st_mtime == PAST + 500
+
+    def test_force_rebuilds_everything(self, tmp_path):
+        source, target, conf = self._setup(tmp_path)
+        md = source / "index.md"
+        md.write_text("Title: Home\n\nHello.")
+        _set_mtime(md, PAST)
+        _set_theme_mtime(source, PAST)
+        _set_mtime(conf, PAST)
+
+        root = _make_tree()
+        root.node_type = NodeType.MARKDOWN
+        root.source = md
+
+        build(root, _site_config(), source, target, config_path=conf)
+        html = target / "index.html"
+        _set_mtime(html, PAST + 500)
+
+        # Force rebuild — should rewrite even though nothing changed
+        build(root, _site_config(), source, target, config_path=conf, force=True)
+        assert html.stat().st_mtime > PAST + 500
+
+    def test_expected_set_populated_when_skipping(self, tmp_path):
+        """Stale files are still cleaned even when builds are skipped."""
+        source, target, conf = self._setup(tmp_path)
+        md = source / "index.md"
+        md.write_text("Title: Home\n\nHello.")
+        _set_mtime(md, PAST)
+        _set_theme_mtime(source, PAST)
+        _set_mtime(conf, PAST)
+
+        root = _make_tree()
+        root.node_type = NodeType.MARKDOWN
+        root.source = md
+
+        build(root, _site_config(), source, target, config_path=conf)
+
+        # Plant a stale file
+        stale = target / "stale.html"
+        stale.write_text("stale")
+
+        # Rebuild (skips markdown because up-to-date) — stale should be removed
+        build(root, _site_config(), source, target, config_path=conf)
+        assert not stale.exists()
+        assert (target / "index.html").exists()

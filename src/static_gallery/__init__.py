@@ -33,6 +33,12 @@ def main() -> None:
         default=None,
         help="config file path (default: site.conf in source root)",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="force full rebuild, ignoring file timestamps",
+    )
 
     args = parser.parse_args()
 
@@ -51,7 +57,8 @@ def main() -> None:
         config_filename = config_path.name if config_path.parent == source else None
         tree = scan(source, config_filename)
 
-        build(tree, site_config, source, target)
+        build(tree, site_config, source, target,
+              config_path=config_path, force=args.force)
     except GalleryError as exc:
         print(exc, file=sys.stderr)
         sys.exit(1)
