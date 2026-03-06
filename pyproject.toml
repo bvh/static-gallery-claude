@@ -13,7 +13,10 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = [
+    "pre-commit>=4.5.1",
+    "pytest>=8.0",
+]
 
 [project.scripts]
 gallery = "static_gallery:main"

@@ -10,6 +10,17 @@ Supports Markdown for source text, and Jinja templates for output.
 * [Python 3.14](https://python.org/)
 * [uv](https://docs.astral.sh/uv/getting-started/)
 
+## Setup
+
+After cloning the repository, install the pre-commit hooks:
+
+```
+uv run pre-commit install
+```
+
+This enables automatic linting and formatting checks (via
+[ruff](https://docs.astral.sh/ruff/)) on every commit.
+
 ## Usage
 
 Static Gallery is a CLI application. Run `uv run gallery --help` from your

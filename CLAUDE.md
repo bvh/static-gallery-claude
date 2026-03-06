@@ -37,4 +37,5 @@ Static Gallery is a static site generator in Python with first-class image/galle
 ### Dependencies
 
 - Runtime: `jinja2`, `mistletoe` (CommonMark), `markupsafe` (via jinja2, used for `Markup()` to mark rendered HTML as safe)
-- Dev: `pytest`
+- Dev: `pytest`, `pre-commit`
+- Linting/formatting: `ruff` (enforced via pre-commit hook)
