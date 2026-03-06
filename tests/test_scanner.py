@@ -206,6 +206,78 @@ class TestScan:
         assert blog.source is None
         assert len(blog.children) == 1
 
+    def test_index_md_collision_with_index_image(self, tmp_path):
+        source = tmp_path / "source"
+        source.mkdir()
+        _make_file(source / "photos" / "index.md", "# Photos")
+        _make_file(source / "photos" / "index.jpg", "fake")
+
+        tree = scan(source, "site.conf")
+        photos = _find_child(tree, "photos")
+        # index.md collapses into dir node
+        assert photos.node_type == NodeType.MARKDOWN
+        assert photos.source == source / "photos" / "index.md"
+        # index.jpg demoted to STATIC, not IMAGE
+        assert len(photos.children) == 1
+        assert photos.children[0].node_type == NodeType.STATIC
+        assert photos.children[0].source == source / "photos" / "index.jpg"
+
+    def test_root_index_collision_with_image(self, tmp_path):
+        source = tmp_path / "source"
+        source.mkdir()
+        _make_file(source / "index.md", "# Home")
+        _make_file(source / "index.jpg", "fake")
+
+        tree = scan(source, "site.conf")
+        # index.md collapses into root
+        assert tree.node_type == NodeType.MARKDOWN
+        assert tree.source == source / "index.md"
+        # index.jpg demoted to STATIC
+        assert len(tree.children) == 1
+        assert tree.children[0].node_type == NodeType.STATIC
+        assert tree.children[0].source == source / "index.jpg"
+
+    def test_multiple_images_same_stem(self, tmp_path):
+        source = tmp_path / "source"
+        source.mkdir()
+        _make_file(source / "photo.jpg", "fake jpg")
+        _make_file(source / "photo.png", "fake png")
+
+        tree = scan(source, "site.conf")
+        files = _all_source_nodes(tree)
+        image_files = [f for f in files if f.node_type == NodeType.IMAGE]
+        assert len(image_files) == 2
+
+    def test_config_filename_none(self, tmp_path):
+        source = tmp_path / "source"
+        source.mkdir()
+        _make_file(source / "site.conf", "title: Test")
+        _make_file(source / "index.md", "# Home")
+
+        tree = scan(source, None)
+        files = _all_source_nodes(tree)
+        # site.conf should NOT be excluded when config_filename is None
+        sources = {f.source for f in files}
+        assert source / "site.conf" in sources
+        assert source / "index.md" in sources
+
+    def test_deeply_nested_paths(self, tmp_path):
+        source = tmp_path / "source"
+        source.mkdir()
+        _make_file(source / "a" / "b" / "c" / "deep.md", "# Deep")
+
+        tree = scan(source, "site.conf")
+        a = _find_child(tree, "a")
+        b = _find_child(a, "b")
+        c = _find_child(b, "c")
+        files = _all_source_nodes(c)
+        assert len(files) == 1
+        assert files[0].source == source / "a" / "b" / "c" / "deep.md"
+        assert files[0].parent is c
+        assert c.parent is b
+        assert b.parent is a
+        assert a.parent is tree
+
     def test_parent_pointers(self, tmp_path):
         source = tmp_path / "source"
         source.mkdir()

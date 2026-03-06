@@ -233,6 +233,27 @@ class TestTargetSync:
 
         assert not stale_dir.exists()
 
+    def test_nested_stale_dirs_cleaned(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source)
+
+        stale_dir = target / "old" / "nested" / "deep"
+        stale_dir.mkdir(parents=True)
+        (stale_dir / "stale.html").write_text("stale")
+
+        md_file = source / "index.md"
+        md_file.write_text("Title: Home\n\nHello.")
+
+        root = _make_tree()
+        root.node_type = NodeType.MARKDOWN
+        root.source = md_file
+        build(root, _site_config(), source, target)
+
+        assert not (target / "old").exists()
+
     def test_target_root_not_removed(self, tmp_path):
         source = tmp_path / "source"
         target = tmp_path / "target"
@@ -251,6 +272,24 @@ class TestBuildErrors:
         target = tmp_path / "target"
         source.mkdir()
         target.mkdir()
+
+        md_file = source / "index.md"
+        md_file.write_text("Title: Home\n\nHello.")
+
+        root = _make_tree()
+        root.node_type = NodeType.MARKDOWN
+        root.source = md_file
+        with pytest.raises(GalleryError):
+            build(root, _site_config(), source, target)
+
+    def test_template_syntax_error_exits(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        theme = source / ".theme"
+        theme.mkdir()
+        (theme / "page.html").write_text("{{ unclosed")
 
         md_file = source / "index.md"
         md_file.write_text("Title: Home\n\nHello.")
