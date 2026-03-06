@@ -33,8 +33,7 @@ def _ensure_dir(root: Node, rel: Path, dir_map: dict[Path, Node]) -> Node:
     return dir_map[rel]
 
 
-def scan(source: Path, config_filename: str) -> Node:
-    config_path = source / config_filename
+def scan(source: Path, config_filename: str | None) -> Node:
     root = Node(node_type=None, name="", source=None, parent=None)
     dir_map: dict[Path, Node] = {}
 
@@ -46,7 +45,7 @@ def scan(source: Path, config_filename: str) -> Node:
         rel = path.relative_to(source)
         if _has_dot_component(rel):
             continue
-        if path == config_path:
+        if config_filename and rel == Path(config_filename):
             continue
 
         parent_rel = rel.parent

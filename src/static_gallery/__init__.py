@@ -48,7 +48,7 @@ def main() -> None:
 
         target.mkdir(parents=True, exist_ok=True)
 
-        config_filename = config_path.name if config_path.parent == source else ""
+        config_filename = config_path.name if config_path.parent == source else None
         tree = scan(source, config_filename)
 
         build(tree, site_config, source, target)
