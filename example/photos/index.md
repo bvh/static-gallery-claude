@@ -2,5 +2,6 @@ Title: Photos
 
 A gallery of images.
 
-- [Sunset](/photos/sunset.html)
-- [Mountain](/photos/mountain.html)
+<<sunset.png A golden sunset over the ocean>>
+
+<<mountain.png Snow-capped mountain peak>>

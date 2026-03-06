@@ -8,6 +8,7 @@ from markupsafe import Markup
 import mistletoe
 
 from static_gallery.config import parse_front_matter
+from static_gallery.shortcodes import expand_shortcodes
 from static_gallery.errors import GalleryError
 from static_gallery.model import Node, NodeType
 
@@ -152,6 +153,7 @@ def _build_markdown(
         raise GalleryError(f"Cannot read {node.source}: {exc}")
 
     metadata, body = parse_front_matter(text)
+    body = expand_shortcodes(body)
     html_content = mistletoe.markdown(body)
 
     template_type = metadata.get("type", "page")

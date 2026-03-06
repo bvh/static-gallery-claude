@@ -266,6 +266,26 @@ class TestTargetSync:
         assert target.exists()
 
 
+class TestShortcodeIntegration:
+    def test_image_shortcode_in_markdown(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source)
+
+        md_file = source / "post.md"
+        md_file.write_text("Title: Post\n\nHere is <<photo.jpg>>.")
+
+        tree = _make_tree(
+            _make_child(NodeType.MARKDOWN, "post", md_file),
+        )
+        build(tree, _site_config(), source, target)
+
+        output = (target / "post.html").read_text()
+        assert '<img src="photo.jpg"' in output
+
+
 class TestBuildErrors:
     def test_missing_template_exits(self, tmp_path):
         source = tmp_path / "source"
