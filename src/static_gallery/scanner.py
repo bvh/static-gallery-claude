@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from static_gallery.model import Node, NodeType
@@ -15,10 +16,6 @@ def _classify(path: Path) -> NodeType:
     if ext in _IMAGE_EXTENSIONS:
         return NodeType.IMAGE
     return NodeType.STATIC
-
-
-def _has_dot_component(rel: Path) -> bool:
-    return any(part.startswith(".") for part in rel.parts)
 
 
 def _ensure_dir(root: Node, rel: Path, dir_map: dict[Path, Node]) -> Node:
@@ -37,19 +34,18 @@ def scan(source: Path, config_filename: str | None) -> Node:
     root = Node(node_type=None, name="", source=None, parent=None)
     dir_map: dict[Path, Node] = {}
 
-    # Collect files grouped by their parent directory
+    # Collect files grouped by their parent directory, pruning dotdirs
     dir_files: dict[Path, list[Path]] = {}
-    for path in sorted(source.rglob("*")):
-        if not path.is_file():
-            continue
-        rel = path.relative_to(source)
-        if _has_dot_component(rel):
-            continue
-        if config_filename and rel == Path(config_filename):
-            continue
-
-        parent_rel = rel.parent
-        dir_files.setdefault(parent_rel, []).append(path)
+    for dirpath, dirnames, filenames in os.walk(source):
+        dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+        rel_dir = Path(dirpath).relative_to(source)
+        for name in sorted(filenames):
+            if name.startswith("."):
+                continue
+            if config_filename and rel_dir == Path(".") and name == config_filename:
+                continue
+            path = Path(dirpath) / name
+            dir_files.setdefault(rel_dir, []).append(path)
 
     # Process each directory's files
     for parent_rel in sorted(dir_files):
