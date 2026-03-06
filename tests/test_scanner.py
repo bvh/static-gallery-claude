@@ -1,7 +1,5 @@
-import pytest
-from pathlib import Path
 from static_gallery.scanner import scan
-from static_gallery.model import Node, NodeType
+from static_gallery.model import NodeType
 
 
 def _make_file(path, content=""):

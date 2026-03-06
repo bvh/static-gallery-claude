@@ -1,8 +1,6 @@
 import os
-import pytest
 import subprocess
 import sys
-from pathlib import Path
 
 
 def _make_site(root):
