@@ -14,13 +14,17 @@ class TestParseConfig:
 
     def test_split_on_first_colon(self, tmp_path):
         conf = tmp_path / "site.conf"
-        conf.write_text("title: My Site\nurl: https://example.com/path\nlanguage: en-us\n")
+        conf.write_text(
+            "title: My Site\nurl: https://example.com/path\nlanguage: en-us\n"
+        )
         result = parse_config(conf)
         assert result["url"] == "https://example.com/path"
 
     def test_whitespace_trimmed(self, tmp_path):
         conf = tmp_path / "site.conf"
-        conf.write_text("  title  :  My Site  \nurl: https://example.com/\nlanguage: en-us\n")
+        conf.write_text(
+            "  title  :  My Site  \nurl: https://example.com/\nlanguage: en-us\n"
+        )
         result = parse_config(conf)
         assert result["title"] == "My Site"
 
@@ -34,14 +38,18 @@ class TestParseConfig:
 
     def test_comments_skipped(self, tmp_path):
         conf = tmp_path / "site.conf"
-        conf.write_text("# comment\ntitle: My Site\nurl: https://example.com/\nlanguage: en-us\n")
+        conf.write_text(
+            "# comment\ntitle: My Site\nurl: https://example.com/\nlanguage: en-us\n"
+        )
         result = parse_config(conf)
         assert "#" not in "".join(result.keys())
         assert result["title"] == "My Site"
 
     def test_blank_lines_skipped(self, tmp_path):
         conf = tmp_path / "site.conf"
-        conf.write_text("title: My Site\n\nurl: https://example.com/\n\nlanguage: en-us\n")
+        conf.write_text(
+            "title: My Site\n\nurl: https://example.com/\n\nlanguage: en-us\n"
+        )
         result = parse_config(conf)
         assert len(result) == 3
 
@@ -58,19 +66,25 @@ class TestParseConfig:
 
     def test_malformed_line_exits(self, tmp_path):
         conf = tmp_path / "site.conf"
-        conf.write_text("title: My Site\nno colon here\nurl: https://example.com/\nlanguage: en-us\n")
+        conf.write_text(
+            "title: My Site\nno colon here\nurl: https://example.com/\nlanguage: en-us\n"
+        )
         with pytest.raises(GalleryError):
             parse_config(conf)
 
     def test_extra_keys_passed_through(self, tmp_path):
         conf = tmp_path / "site.conf"
-        conf.write_text("title: My Site\nurl: https://example.com/\nlanguage: en-us\nauthor: Jane\n")
+        conf.write_text(
+            "title: My Site\nurl: https://example.com/\nlanguage: en-us\nauthor: Jane\n"
+        )
         result = parse_config(conf)
         assert result["author"] == "Jane"
 
     def test_duplicate_keys_last_wins(self, tmp_path):
         conf = tmp_path / "site.conf"
-        conf.write_text("title: First\ntitle: Second\nurl: https://example.com/\nlanguage: en-us\n")
+        conf.write_text(
+            "title: First\ntitle: Second\nurl: https://example.com/\nlanguage: en-us\n"
+        )
         result = parse_config(conf)
         assert result["title"] == "Second"
 

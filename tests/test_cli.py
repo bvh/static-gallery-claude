@@ -31,7 +31,8 @@ class TestCLIIntegration:
         target = source / ".public"
         result = subprocess.run(
             [sys.executable, "-m", "static_gallery", "--source", str(source)],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         assert result.returncode == 0
         assert (target / "index.html").exists()
@@ -47,18 +48,32 @@ class TestCLIIntegration:
 
         target = tmp_path / "output"
         result = subprocess.run(
-            [sys.executable, "-m", "static_gallery",
-             "--source", str(source), "--target", str(target)],
-            capture_output=True, text=True,
+            [
+                sys.executable,
+                "-m",
+                "static_gallery",
+                "--source",
+                str(source),
+                "--target",
+                str(target),
+            ],
+            capture_output=True,
+            text=True,
         )
         assert result.returncode == 0
         assert (target / "index.html").exists()
 
     def test_missing_source_exits(self, tmp_path):
         result = subprocess.run(
-            [sys.executable, "-m", "static_gallery",
-             "--source", str(tmp_path / "nonexistent")],
-            capture_output=True, text=True,
+            [
+                sys.executable,
+                "-m",
+                "static_gallery",
+                "--source",
+                str(tmp_path / "nonexistent"),
+            ],
+            capture_output=True,
+            text=True,
         )
         assert result.returncode != 0
 
@@ -82,7 +97,8 @@ class TestCLIIntegration:
         target = source / ".public"
         result = subprocess.run(
             [sys.executable, "-m", "static_gallery", "--source", str(source)],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         assert result.returncode == 0, result.stderr
 
@@ -118,7 +134,8 @@ class TestCLIIntegration:
         # First build
         subprocess.run(
             [sys.executable, "-m", "static_gallery", "--source", str(source)],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         assert (target / "old.html").exists()
 
@@ -126,7 +143,8 @@ class TestCLIIntegration:
         (source / "old.md").unlink()
         subprocess.run(
             [sys.executable, "-m", "static_gallery", "--source", str(source)],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         assert not (target / "old.html").exists()
         assert (target / "index.html").exists()
@@ -143,9 +161,17 @@ class TestCLIIntegration:
         (source / "index.md").write_text("Title: Home\n\nHi.")
 
         result = subprocess.run(
-            [sys.executable, "-m", "static_gallery",
-             "--source", str(source), "--config", str(custom_conf)],
-            capture_output=True, text=True,
+            [
+                sys.executable,
+                "-m",
+                "static_gallery",
+                "--source",
+                str(source),
+                "--config",
+                str(custom_conf),
+            ],
+            capture_output=True,
+            text=True,
         )
         assert result.returncode == 0
         assert (source / ".public" / "index.html").exists()
@@ -161,7 +187,8 @@ class TestCLIIntegration:
         # First build
         subprocess.run(
             [sys.executable, "-m", "static_gallery", "--source", str(source)],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         html = target / "index.html"
         assert html.exists()
@@ -177,14 +204,23 @@ class TestCLIIntegration:
         # Rebuild without --force: should skip (mtime unchanged)
         subprocess.run(
             [sys.executable, "-m", "static_gallery", "--source", str(source)],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         assert html.stat().st_mtime == past
 
         # Rebuild with --force: should rewrite
         result = subprocess.run(
-            [sys.executable, "-m", "static_gallery", "--source", str(source), "--force"],
-            capture_output=True, text=True,
+            [
+                sys.executable,
+                "-m",
+                "static_gallery",
+                "--source",
+                str(source),
+                "--force",
+            ],
+            capture_output=True,
+            text=True,
         )
         assert result.returncode == 0
         assert html.stat().st_mtime > past

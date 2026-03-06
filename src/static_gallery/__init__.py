@@ -57,8 +57,9 @@ def main() -> None:
         config_filename = config_path.name if config_path.parent == source else None
         tree = scan(source, config_filename)
 
-        build(tree, site_config, source, target,
-              config_path=config_path, force=args.force)
+        build(
+            tree, site_config, source, target, config_path=config_path, force=args.force
+        )
     except GalleryError as exc:
         print(exc, file=sys.stderr)
         sys.exit(1)

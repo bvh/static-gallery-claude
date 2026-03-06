@@ -23,8 +23,12 @@ def _ensure_dir(root: Node, rel: Path, dir_map: dict[Path, Node]) -> Node:
         partial = Path(*rel.parts[: i + 1])
         if partial not in dir_map:
             parent_path = partial.parent
-            parent_node = dir_map.get(parent_path, root) if parent_path != partial else root
-            child = Node(node_type=None, name=rel.parts[i], source=None, parent=parent_node)
+            parent_node = (
+                dir_map.get(parent_path, root) if parent_path != partial else root
+            )
+            child = Node(
+                node_type=None, name=rel.parts[i], source=None, parent=parent_node
+            )
             parent_node.children.append(child)
             dir_map[partial] = child
     return dir_map[rel]
