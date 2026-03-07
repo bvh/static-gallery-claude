@@ -21,9 +21,8 @@ from static_gallery.errors import GalleryError
 from static_gallery.model import IMAGE_EXTENSIONS, Node, NodeType
 
 
-def _compute_global_mtime(source: Path, config_path: Path | None) -> float:
+def _compute_global_mtime(theme_dir: Path, config_path: Path | None) -> float:
     mtime = 0.0
-    theme_dir = source / ".theme"
     if theme_dir.is_dir():
         for entry in theme_dir.rglob("*"):
             if entry.is_file():
@@ -100,8 +99,10 @@ def build(
     *,
     config_path: Path | None = None,
     force: bool = False,
+    theme_dir: Path | None = None,
 ) -> None:
-    theme_dir = source / ".theme"
+    if theme_dir is None:
+        theme_dir = source / ".theme"
     try:
         env = jinja2.Environment(
             loader=jinja2.FileSystemLoader(str(theme_dir)),
@@ -115,7 +116,7 @@ def build(
     if force:
         global_mtime = float("inf")
     else:
-        global_mtime = _compute_global_mtime(source, config_path)
+        global_mtime = _compute_global_mtime(theme_dir, config_path)
 
     expected: set[Path] = set()
     meta_cache: dict[Path, dict[str, dict]] = {}

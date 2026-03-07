@@ -1,6 +1,12 @@
+import argparse
 import os
 import subprocess
 import sys
+
+import pytest
+
+from static_gallery import _resolve_dirs
+from static_gallery.errors import GalleryError
 
 
 def _make_site(root):
@@ -224,3 +230,132 @@ class TestCLIIntegration:
         )
         assert result.returncode == 0
         assert html.stat().st_mtime > past
+
+
+def _make_args(**kwargs):
+    """Create an argparse.Namespace with default None values."""
+    defaults = {"source": None, "target": None, "config": None, "force": False}
+    defaults.update(kwargs)
+    return argparse.Namespace(**defaults)
+
+
+class TestResolveDirs:
+    def test_target_inside_source_rejected(self, tmp_path):
+        source = tmp_path / "site"
+        source.mkdir()
+        (source / "site.conf").write_text(
+            "title: Test\nurl: https://example.com/\nlanguage: en-us\n"
+        )
+
+        args = _make_args(source=source, target=source / "output")
+        with pytest.raises(GalleryError, match="inside source"):
+            _resolve_dirs(args)
+
+    def test_target_equals_source_rejected(self, tmp_path):
+        source = tmp_path / "site"
+        source.mkdir()
+        (source / "site.conf").write_text(
+            "title: Test\nurl: https://example.com/\nlanguage: en-us\n"
+        )
+
+        args = _make_args(source=source, target=source)
+        with pytest.raises(GalleryError, match="inside source"):
+            _resolve_dirs(args)
+
+    def test_dotdir_target_inside_source_allowed(self, tmp_path):
+        source = tmp_path / "site"
+        source.mkdir()
+        (source / "site.conf").write_text(
+            "title: Test\nurl: https://example.com/\nlanguage: en-us\n"
+        )
+
+        args = _make_args(source=source, target=source / ".hidden")
+        src, tgt, theme, cfg, conf = _resolve_dirs(args)
+        assert tgt == (source / ".hidden").resolve()
+
+    def test_target_outside_source_allowed(self, tmp_path):
+        source = tmp_path / "site"
+        source.mkdir()
+        (source / "site.conf").write_text(
+            "title: Test\nurl: https://example.com/\nlanguage: en-us\n"
+        )
+
+        args = _make_args(source=source, target=tmp_path / "output")
+        src, tgt, theme, cfg, conf = _resolve_dirs(args)
+        assert tgt == (tmp_path / "output").resolve()
+
+    def test_default_theme(self, tmp_path):
+        source = tmp_path / "site"
+        source.mkdir()
+        (source / "site.conf").write_text(
+            "title: Test\nurl: https://example.com/\nlanguage: en-us\n"
+        )
+
+        args = _make_args(source=source)
+        src, tgt, theme, cfg, conf = _resolve_dirs(args)
+        assert theme == (source / ".theme").resolve()
+
+    def test_theme_from_config(self, tmp_path):
+        source = tmp_path / "site"
+        source.mkdir()
+        my_theme = tmp_path / "my-theme"
+        my_theme.mkdir()
+        (source / "site.conf").write_text(
+            "title: Test\nurl: https://example.com/\nlanguage: en-us\ntheme: ../my-theme\n"
+        )
+
+        args = _make_args(source=source)
+        src, tgt, theme, cfg, conf = _resolve_dirs(args)
+        assert theme == my_theme.resolve()
+
+    def test_source_from_config(self, tmp_path):
+        site_dir = tmp_path / "site"
+        site_dir.mkdir()
+        (tmp_path / "site.conf").write_text(
+            "title: Test\nurl: https://example.com/\nlanguage: en-us\nsource: ./site\n"
+        )
+
+        args = _make_args(config=tmp_path / "site.conf")
+        src, tgt, theme, cfg, conf = _resolve_dirs(args)
+        assert src == site_dir.resolve()
+
+    def test_target_from_config(self, tmp_path):
+        source = tmp_path / "site"
+        source.mkdir()
+        output = tmp_path / "public"
+        (source / "site.conf").write_text(
+            "title: Test\nurl: https://example.com/\nlanguage: en-us\ntarget: ../public\n"
+        )
+
+        args = _make_args(source=source)
+        src, tgt, theme, cfg, conf = _resolve_dirs(args)
+        assert tgt == output.resolve()
+
+    def test_target_from_config_inside_source_rejected(self, tmp_path):
+        source = tmp_path / "site"
+        source.mkdir()
+        (source / "site.conf").write_text(
+            "title: Test\nurl: https://example.com/\nlanguage: en-us\ntarget: ./site/output\n"
+        )
+
+        args = _make_args(config=source / "site.conf")
+        with pytest.raises(GalleryError, match="inside source"):
+            _resolve_dirs(args)
+
+    def test_cli_flags_override_config(self, tmp_path):
+        source = tmp_path / "site"
+        source.mkdir()
+        other_source = tmp_path / "other"
+        other_source.mkdir()
+        (source / "site.conf").write_text(
+            "title: Test\nurl: https://example.com/\nlanguage: en-us\nsource: ./wrong\ntarget: ./wrong-target\n"
+        )
+
+        args = _make_args(
+            source=other_source,
+            target=tmp_path / "out",
+            config=source / "site.conf",
+        )
+        src, tgt, theme, cfg, conf = _resolve_dirs(args)
+        assert src == other_source.resolve()
+        assert tgt == (tmp_path / "out").resolve()

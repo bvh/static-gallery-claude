@@ -10,9 +10,9 @@
 
 ~~`expand_shortcodes` resolves `source_dir / path_str` with no confinement check. A shortcode like `<<../../etc/passwd.txt>>` would read files outside the source tree. After resolving, verify that the result is still within the source root (e.g. `resolved.resolve().is_relative_to(source_root)`).~~
 
-### Custom --target inside source causes feedback loop
+### ~~Custom --target inside source causes feedback loop~~ (Fixed)
 
-A user running `--target ./output` (no dot prefix) means the scanner will pick up previously-built HTML as source files on the next run. The default `.public` is safe because dotdirs are excluded, but nothing prevents a non-dot target inside source. Either warn/error when target is inside source without a dot prefix, or explicitly exclude the target path during scanning.
+~~The target directory is now validated after resolution. Non-dotdir targets inside the source tree raise `GalleryError`. Dotdir targets (e.g. `.public`) and targets outside the source tree are allowed.~~
 
 ### ~~Gallery shortcode path option has same traversal issue~~ (Fixed)
 
@@ -23,6 +23,10 @@ A user running `--target ./output` (no dot prefix) means the scanner will pick u
 ~~Shortcodes can inline external files (code, text, csv), but the mtime check only considers the markdown source and the global mtime (templates + config). If an inlined file changes but the markdown file doesn't, the page won't be rebuilt. `shortcode_dependencies()` now scans markdown text for referenced files and gallery images; their mtimes are checked during incremental builds.~~
 
 ## Design
+
+### Config keys `source`, `target`, `theme` leak into template context
+
+`parse_config` returns all keys from site.conf. The new `source`, `target`, and `theme` directory keys end up in `site_config`, which is passed to every template as `{{ site.source }}` etc. This exposes filesystem paths in rendered HTML and could hijack a site that already uses one of these key names for display purposes. Consider stripping the directory keys from `site_config` after resolving them in `_resolve_dirs`.
 
 ### Front matter parsing is mutated in `builder.py`
 
