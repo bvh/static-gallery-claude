@@ -9,10 +9,15 @@ from markupsafe import Markup
 import mistletoe
 
 from static_gallery.config import parse_front_matter
-from static_gallery.metadata import read_image_metadata, resolve_alt, resolve_title
+from static_gallery.metadata import (
+    copy_image_stripped,
+    read_image_metadata,
+    resolve_alt,
+    resolve_title,
+)
 from static_gallery.shortcodes import expand_shortcodes
 from static_gallery.errors import GalleryError
-from static_gallery.model import Node, NodeType
+from static_gallery.model import IMAGE_EXTENSIONS, Node, NodeType
 
 
 def _compute_global_mtime(source: Path, config_path: Path | None) -> float:
@@ -337,7 +342,7 @@ def _build_image(
     if not skip_asset:
         asset_target.parent.mkdir(parents=True, exist_ok=True)
         try:
-            shutil.copy2(node.source, asset_target)
+            copy_image_stripped(node.source, asset_target)
         except OSError as exc:
             raise GalleryError(f"Cannot copy {node.source} to {asset_target}: {exc}")
 
@@ -345,7 +350,10 @@ def _build_image(
 def _build_static(node: Node, asset_target: Path) -> None:
     asset_target.parent.mkdir(parents=True, exist_ok=True)
     try:
-        shutil.copy2(node.source, asset_target)
+        if node.source.suffix.lower() in IMAGE_EXTENSIONS:
+            copy_image_stripped(node.source, asset_target)
+        else:
+            shutil.copy2(node.source, asset_target)
     except OSError as exc:
         raise GalleryError(f"Cannot copy {node.source} to {asset_target}: {exc}")
 

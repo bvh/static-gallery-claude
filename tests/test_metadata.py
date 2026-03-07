@@ -2,6 +2,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 from static_gallery.metadata import (
+    copy_image_stripped,
     read_image_metadata,
     resolve_title,
     resolve_alt,
@@ -128,3 +129,94 @@ class TestReadImageMetadata:
         read_image_metadata(bad)
         captured = capsys.readouterr()
         assert "Warning: could not read metadata" in captured.err
+
+
+class TestCopyImageStripped:
+    def test_keeps_allowed_fields_removes_others(self, tmp_path):
+        src = tmp_path / "src.jpg"
+        dest = tmp_path / "dest.jpg"
+        src.write_bytes(b"fake")
+
+        mock_img = MagicMock()
+        mock_img.read_exif.return_value = {
+            "Exif.Image.Artist": "Alice",
+            "Exif.Image.Make": "Canon",
+            "Exif.Photo.DateTimeOriginal": "2025:01:01 12:00:00",
+            "Exif.Photo.LensModel": "50mm",
+        }
+        mock_img.read_iptc.return_value = {
+            "Iptc.Application2.Copyright": "2025 Alice",
+            "Iptc.Application2.Keywords": "test",
+        }
+        mock_img.read_xmp.return_value = {
+            "Xmp.dc.title": {'lang="x-default"': "My Photo"},
+            "Xmp.crs.Version": "15.0",
+        }
+
+        with patch("static_gallery.metadata.pyexiv2.Image", return_value=mock_img):
+            copy_image_stripped(src, dest)
+
+        mock_img.clear_exif.assert_called_once()
+        mock_img.clear_iptc.assert_called_once()
+        mock_img.clear_xmp.assert_called_once()
+
+        exif_written = mock_img.modify_exif.call_args[0][0]
+        assert exif_written == {
+            "Exif.Image.Artist": "Alice",
+            "Exif.Photo.DateTimeOriginal": "2025:01:01 12:00:00",
+        }
+
+        iptc_written = mock_img.modify_iptc.call_args[0][0]
+        assert iptc_written == {"Iptc.Application2.Copyright": "2025 Alice"}
+
+        xmp_written = mock_img.modify_xmp.call_args[0][0]
+        assert xmp_written == {"Xmp.dc.title": {'lang="x-default"': "My Photo"}}
+
+        mock_img.close.assert_called_once()
+        assert dest.read_bytes() == b"fake"
+
+    def test_no_modify_called_when_no_fields_kept(self, tmp_path):
+        src = tmp_path / "src.jpg"
+        dest = tmp_path / "dest.jpg"
+        src.write_bytes(b"fake")
+
+        mock_img = MagicMock()
+        mock_img.read_exif.return_value = {"Exif.Image.Make": "Canon"}
+        mock_img.read_iptc.return_value = {}
+        mock_img.read_xmp.return_value = {"Xmp.crs.Version": "15.0"}
+
+        with patch("static_gallery.metadata.pyexiv2.Image", return_value=mock_img):
+            copy_image_stripped(src, dest)
+
+        mock_img.modify_exif.assert_not_called()
+        mock_img.modify_iptc.assert_not_called()
+        mock_img.modify_xmp.assert_not_called()
+
+    def test_still_copies_on_metadata_failure(self, tmp_path, capsys):
+        src = tmp_path / "src.jpg"
+        dest = tmp_path / "dest.jpg"
+        src.write_bytes(b"image data")
+
+        with patch(
+            "static_gallery.metadata.pyexiv2.Image", side_effect=Exception("bad")
+        ):
+            copy_image_stripped(src, dest)
+
+        assert dest.read_bytes() == b"image data"
+        captured = capsys.readouterr()
+        assert "Warning: could not strip metadata" in captured.err
+
+    def test_real_image(self, tmp_path):
+        path = Path("BVH_0497-4x5.jpg")
+        if not path.exists():
+            return
+
+        dest = tmp_path / "stripped.jpg"
+        copy_image_stripped(path, dest)
+        meta = read_image_metadata(dest)
+        assert meta["iptc"].get("Copyright")
+        assert meta["exif"].get("Artist")
+        assert meta["exif"].get("DateTimeOriginal")
+        # Editing metadata should be gone
+        assert "LensModel" not in meta["exif"]
+        assert "Make" not in meta["exif"]

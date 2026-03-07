@@ -8,7 +8,7 @@ from pathlib import Path, PurePosixPath
 import jinja2
 
 from static_gallery.errors import GalleryError
-from static_gallery.scanner import IMAGE_EXTENSIONS
+from static_gallery.model import IMAGE_EXTENSIONS
 
 _SHORTCODE_RE = re.compile(r"<<\s*([^\s>]+)(?:\s+(.+?))?\s*>>")
 

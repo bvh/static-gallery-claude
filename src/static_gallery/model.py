@@ -5,6 +5,9 @@ from enum import Enum, auto
 from pathlib import Path
 
 
+IMAGE_EXTENSIONS = {".jpeg", ".jpg", ".webp", ".png"}
+
+
 class NodeType(Enum):
     MARKDOWN = auto()
     IMAGE = auto()

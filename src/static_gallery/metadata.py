@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 import pyexiv2
@@ -75,3 +78,62 @@ def resolve_alt(stem: str, metadata: dict[str, dict]) -> str:
             return extracted
 
     return stem.replace("-", " ").replace("_", " ")
+
+
+_KEEP_EXIF = {
+    "Exif.Image.Artist",
+    "Exif.Image.Copyright",
+    "Exif.Image.ImageDescription",
+    "Exif.Image.DateTime",
+    "Exif.Photo.DateTimeOriginal",
+    "Exif.Photo.DateTimeDigitized",
+}
+
+_KEEP_IPTC = {
+    "Iptc.Application2.Byline",
+    "Iptc.Application2.Copyright",
+    "Iptc.Application2.Caption",
+    "Iptc.Application2.DateCreated",
+    "Iptc.Application2.TimeCreated",
+}
+
+_KEEP_XMP = {
+    "Xmp.dc.creator",
+    "Xmp.dc.rights",
+    "Xmp.dc.description",
+    "Xmp.dc.title",
+    "Xmp.xmp.CreateDate",
+    "Xmp.photoshop.DateCreated",
+}
+
+
+def copy_image_stripped(source: Path, dest: Path) -> None:
+    """Copy an image file, stripping metadata except artist/copyright/description/date."""
+    fd, tmp = tempfile.mkstemp(suffix=source.suffix, dir=dest.parent)
+    try:
+        os.close(fd)
+        tmp_path = Path(tmp)
+        shutil.copy2(source, tmp_path)
+        img = pyexiv2.Image(str(tmp_path))
+        try:
+            exif = {k: v for k, v in img.read_exif().items() if k in _KEEP_EXIF}
+            iptc = {k: v for k, v in img.read_iptc().items() if k in _KEEP_IPTC}
+            xmp = {k: v for k, v in img.read_xmp().items() if k in _KEEP_XMP}
+            img.clear_exif()
+            img.clear_iptc()
+            img.clear_xmp()
+            if exif:
+                img.modify_exif(exif)
+            if iptc:
+                img.modify_iptc(iptc)
+            if xmp:
+                img.modify_xmp(xmp)
+        finally:
+            img.close()
+        tmp_path.replace(dest)
+    except Exception as exc:
+        Path(tmp).unlink(missing_ok=True)
+        print(
+            f"Warning: could not strip metadata from {source}: {exc}", file=sys.stderr
+        )
+        shutil.copy2(source, dest)

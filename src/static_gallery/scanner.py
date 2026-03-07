@@ -3,10 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from static_gallery.model import Node, NodeType
-
-
-IMAGE_EXTENSIONS = {".jpeg", ".jpg", ".webp", ".png"}
+from static_gallery.model import IMAGE_EXTENSIONS, Node, NodeType
 
 
 def _classify(path: Path) -> NodeType:
