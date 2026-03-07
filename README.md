@@ -34,6 +34,9 @@ directory)
 `--config`: sets the root configuration file (default is `site.conf` in the
 root of the source directory)
 
+`--force`: force a full rebuild, ignoring file timestamps (by default, only
+files newer than their target are rebuilt)
+
 ## Configuration
 
 The root of the site source directory **must** contain a `site.conf` file.
@@ -101,6 +104,8 @@ for `.theme/{type}.html`. Default types are:
 
 * **page** — used for markdown files (i.e., `.theme/page.html`)
 * **image** — used for image files (i.e., `.theme/image.html`)
+* **listing** — used for auto-generated directory index pages (i.e.,
+  `.theme/listing.html`); optional — see [Auto-Indexing](#auto-indexing)
 
 Markdown files can override the default type via a `Type:` front matter
 key. For example, a markdown file with `Type: image` will use
@@ -113,6 +118,34 @@ The following variables are available within templates:
   metadata (image files)
 * **content** — the rendered HTML body (for markdown files) or the image
   path (for image files)
+
+## Image Metadata
+
+Image metadata is extracted automatically using
+[pyexiv2](https://github.com/LeoHsiao1/pyexiv2) and made available to
+templates. EXIF, IPTC, and XMP data are read and exposed under
+`page.exif`, `page.iptc`, and `page.xmp` respectively, with shortened
+keys (namespace prefixes stripped).
+
+Metadata is used to resolve image titles and alt text:
+
+* **Title** — uses IPTC `ObjectName`, then XMP `dc:title`, then falls
+  back to the filename stem (dashes/underscores replaced with spaces,
+  title-cased).
+* **Alt text** — uses XMP `AltTextAccessibility`, then falls back to the
+  filename stem (dashes/underscores replaced with spaces).
+
+### Metadata Stripping
+
+When images are copied to the target directory, metadata is stripped for
+privacy, keeping only:
+
+* Artist / byline
+* Copyright
+* Description / caption
+* Date fields (created, digitized, original)
+
+If stripping fails, the image is copied as-is with a warning to stderr.
 
 ## Shortcodes
 
@@ -175,6 +208,32 @@ receives an `images` list (each with `path`, `filename`, `stem`,
 Only image types that generate HTML pages (`.jpeg`, `.jpg`, `.webp`,
 `.png`) are included in gallery listings.
 
+## Auto-Indexing
+
+Directories that do not contain an `index.md` can automatically receive a
+generated index page listing their contents. This requires a
+`.theme/listing.html` template — if the template is absent, directories
+without `index.md` simply have no generated page.
+
+The listing template receives:
+
+* **site** — site configuration
+* **page** — `{"title": ...}` (derived from directory name, or site title
+  for the root)
+* **children** — a dict with three lists:
+  * **directories** — `[{"name", "url"}, ...]`
+  * **pages** — `[{"name", "title", "url"}, ...]`
+  * **images** — `[{"filename", "stem", "title", "alt", "url", "src",
+    "exif", "iptc", "xmp"}, ...]`
+
+## Incremental Builds
+
+By default, the system performs incremental builds: a file is only rebuilt
+if its source is newer than its target. For HTML pages, the modification
+time of all templates and the site config are also considered — a change
+to any template or config triggers a rebuild of all pages. Use `--force`
+to bypass timestamp checks and rebuild everything.
+
 ## Workflow
 
 The system starts by scanning the root of the site source directory for a
@@ -216,9 +275,9 @@ Given the following source tree:
 ├── about.md
 ├── portrait.jpg
 ├── news
-│   ├── index.md
-│   ├── today.md
-│   └── today.jpg
+│   ├── index.md
+│   ├── today.md
+│   └── today.jpg
 └── styles.css
 ```
 
@@ -247,9 +306,9 @@ The resulting target tree should look like this:
 ├── portrait.html   <-- generated from portrait.jpg
 ├── portrait.jpg    <-- copied from portrait.jpg
 ├── news
-│   ├── index.html  <-- generated from news/index.md
-│   ├── today.html  <-- generated from news/today.md
-│   └── today.jpg   <-- copied from news/today.jpg
+│   ├── index.html  <-- generated from news/index.md
+│   ├── today.html  <-- generated from news/today.md
+│   └── today.jpg   <-- copied from news/today.jpg
 └── styles.css      <-- copied from styles.css
 ```
 
