@@ -14,6 +14,7 @@ from static_gallery.metadata import (
     read_image_metadata,
     resolve_alt,
     resolve_title,
+    stem_to_title,
 )
 from static_gallery.shortcodes import expand_shortcodes
 from static_gallery.errors import GalleryError
@@ -167,7 +168,7 @@ def _build_node(
     elif node.node_type == NodeType.STATIC:
         if not _is_up_to_date(asset_target, node.source, global_mtime, is_html=False):
             _build_static(node, asset_target)
-    elif node.node_type is None and node.children and listing_template is not None:
+    elif node.node_type is None and node.children and has_listing:
         source_dir = source / Path(*_node_segments(node)) if node.name else source
         if not _is_up_to_date(html_target, source_dir, global_mtime, is_html=True):
             _build_listing(node, html_target, site_config, listing_template, meta_cache)
@@ -226,16 +227,9 @@ def _collect_children_data(
             is_index = (
                 child.source is not None and child.source.name.lower() == "index.md"
             )
-            if is_index:
-                title = child.name.replace("-", " ").replace("_", " ").title()
-                pages.append(
-                    {"name": child.name, "title": title, "url": child.name + "/"}
-                )
-            else:
-                title = child.name.replace("-", " ").replace("_", " ").title()
-                pages.append(
-                    {"name": child.name, "title": title, "url": child.name + ".html"}
-                )
+            title = stem_to_title(child.name)
+            url = child.name + ("/" if is_index else ".html")
+            pages.append({"name": child.name, "title": title, "url": url})
         elif child.node_type == NodeType.IMAGE:
             stem = child.source.stem
             image_meta = _get_image_metadata(child.source, meta_cache)
@@ -265,7 +259,7 @@ def _build_listing(
 ) -> None:
     children_data = _collect_children_data(node, meta_cache)
     if node.name:
-        title = node.name.replace("-", " ").replace("_", " ").title()
+        title = stem_to_title(node.name)
     else:
         title = site_config.get("title", "")
 

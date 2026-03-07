@@ -8,6 +8,7 @@ from pathlib import Path, PurePosixPath
 import jinja2
 
 from static_gallery.errors import GalleryError
+from static_gallery.metadata import stem_to_alt
 from static_gallery.model import IMAGE_EXTENSIONS
 
 _SHORTCODE_RE = re.compile(r"<<\s*([^\s>]+)(?:\s+(.+?))?\s*>>")
@@ -113,7 +114,7 @@ def _expand_gallery(
                 "filename": img.name,
                 "stem": stem,
                 "extension": img.suffix.lower(),
-                "alt": stem.replace("-", " ").replace("_", " "),
+                "alt": stem_to_alt(stem),
                 "page_url": f"{stem}.html",
             }
         )
@@ -162,9 +163,7 @@ def expand_shortcodes(body: str, env: jinja2.Environment, source_dir: Path) -> s
             "filename": pp.name,
             "stem": pp.stem,
             "extension": ext,
-            "alt": alt
-            if alt is not None
-            else pp.stem.replace("-", " ").replace("_", " "),
+            "alt": alt if alt is not None else stem_to_alt(pp.stem),
         }
 
         if type_name in _INLINE_TYPES:

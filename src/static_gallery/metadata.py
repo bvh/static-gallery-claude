@@ -30,6 +30,14 @@ def _extract_lang_alt(value: object) -> str | None:
     return None
 
 
+def stem_to_title(stem: str) -> str:
+    return stem.replace("-", " ").replace("_", " ").title()
+
+
+def stem_to_alt(stem: str) -> str:
+    return stem.replace("-", " ").replace("_", " ")
+
+
 def read_image_metadata(path: Path) -> dict[str, dict]:
     """Read EXIF, IPTC, and XMP metadata from an image file.
 
@@ -66,7 +74,7 @@ def resolve_title(stem: str, metadata: dict[str, dict]) -> str:
         if extracted:
             return extracted
 
-    return stem.replace("-", " ").replace("_", " ").title()
+    return stem_to_title(stem)
 
 
 def resolve_alt(stem: str, metadata: dict[str, dict]) -> str:
@@ -77,7 +85,7 @@ def resolve_alt(stem: str, metadata: dict[str, dict]) -> str:
         if extracted:
             return extracted
 
-    return stem.replace("-", " ").replace("_", " ")
+    return stem_to_alt(stem)
 
 
 _KEEP_EXIF = {
