@@ -7,6 +7,7 @@ from static_gallery.model import Node, NodeType
 
 PAGE_TEMPLATE = "<html><head><title>{{ page.title }}</title></head><body>{{ content }}</body></html>"
 IMAGE_TEMPLATE = '<html><head><title>{{ page.title }}</title></head><body><img src="{{ content }}"></body></html>'
+LISTING_TEMPLATE = "<html><head><title>{{ page.title }}</title></head><body>{% for d in children.directories %}dir:{{ d.name }} {% endfor %}{% for p in children.pages %}page:{{ p.title }} {% endfor %}{% for i in children.images %}img:{{ i.stem }} {% endfor %}</body></html>"
 
 
 SHORTCODE_IMAGE_TEMPLATE = '<img src="{{ path }}" alt="{{ alt }}">'
@@ -15,11 +16,13 @@ SHORTCODE_CODE_TEMPLATE = (
 )
 
 
-def _setup_theme(source, page=PAGE_TEMPLATE, image=IMAGE_TEMPLATE):
+def _setup_theme(source, page=PAGE_TEMPLATE, image=IMAGE_TEMPLATE, listing=None):
     theme = source / ".theme"
     theme.mkdir(parents=True, exist_ok=True)
     (theme / "page.html").write_text(page)
     (theme / "image.html").write_text(image)
+    if listing is not None:
+        (theme / "listing.html").write_text(listing)
     sc = theme / "shortcodes"
     sc.mkdir(exist_ok=True)
     (sc / "image.html").write_text(SHORTCODE_IMAGE_TEMPLATE)
@@ -542,3 +545,164 @@ class TestIncrementalBuild:
         build(root, _site_config(), source, target, config_path=conf)
         assert not stale.exists()
         assert (target / "index.html").exists()
+
+
+class TestAutoIndex:
+    def test_generates_index_for_dir_with_images(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source, listing=LISTING_TEMPLATE)
+
+        img = source / "photos" / "sunset.jpg"
+        img.parent.mkdir()
+        img.write_bytes(b"fake")
+
+        photos = Node(node_type=None, name="photos", source=None, parent=None)
+        child = _make_child(NodeType.IMAGE, "sunset", img, parent=photos)
+        photos.children.append(child)
+        tree = _make_tree(photos)
+
+        build(tree, _site_config(), source, target)
+
+        listing = target / "photos" / "index.html"
+        assert listing.exists()
+        content = listing.read_text()
+        assert "img:sunset" in content
+        assert "<title>Photos</title>" in content
+
+    def test_skipped_when_no_listing_template(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source)  # no listing template
+
+        img = source / "photos" / "sunset.jpg"
+        img.parent.mkdir()
+        img.write_bytes(b"fake")
+
+        photos = Node(node_type=None, name="photos", source=None, parent=None)
+        child = _make_child(NodeType.IMAGE, "sunset", img, parent=photos)
+        photos.children.append(child)
+        tree = _make_tree(photos)
+
+        build(tree, _site_config(), source, target)
+
+        assert not (target / "photos" / "index.html").exists()
+
+    def test_skipped_for_empty_directories(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source, listing=LISTING_TEMPLATE)
+
+        empty_dir = Node(node_type=None, name="empty", source=None, parent=None)
+        tree = _make_tree(empty_dir)
+
+        build(tree, _site_config(), source, target)
+
+        assert not (target / "empty" / "index.html").exists()
+
+    def test_not_used_when_index_md_exists(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source, listing=LISTING_TEMPLATE)
+
+        md = source / "photos" / "index.md"
+        md.parent.mkdir()
+        md.write_text("Title: My Photos\n\nCustom page.")
+
+        photos = Node(
+            node_type=NodeType.MARKDOWN, name="photos", source=md, parent=None
+        )
+        tree = _make_tree(photos)
+
+        build(tree, _site_config(), source, target)
+
+        content = (target / "photos" / "index.html").read_text()
+        assert "Custom page." in content
+        assert "img:" not in content  # listing template not used
+
+    def test_template_receives_categorized_children(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source, listing=LISTING_TEMPLATE)
+
+        # Create source dirs for the nodes
+        (source / "gallery").mkdir()
+        (source / "gallery" / "sub").mkdir()
+
+        img = source / "gallery" / "photo.jpg"
+        img.write_bytes(b"fake")
+        md = source / "gallery" / "about.md"
+        md.write_text("Title: About\n\nInfo.")
+        css = source / "gallery" / "sub" / "x.css"
+        css.write_text("body{}")
+
+        gallery = Node(node_type=None, name="gallery", source=None, parent=None)
+        sub = Node(node_type=None, name="sub", source=None, parent=gallery)
+        sub.children.append(_make_child(NodeType.STATIC, "dummy", css, parent=sub))
+        img_child = _make_child(NodeType.IMAGE, "photo", img, parent=gallery)
+        md_child = _make_child(NodeType.MARKDOWN, "about", md, parent=gallery)
+        gallery.children.extend([sub, img_child, md_child])
+        tree = _make_tree(gallery)
+
+        build(tree, _site_config(), source, target)
+
+        content = (target / "gallery" / "index.html").read_text()
+        assert "dir:sub" in content
+        assert "page:About" in content
+        assert "img:photo" in content
+
+    def test_root_auto_indexed(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source, listing=LISTING_TEMPLATE)
+
+        img = source / "photo.jpg"
+        img.write_bytes(b"fake")
+
+        tree = _make_tree(
+            _make_child(NodeType.IMAGE, "photo", img),
+        )
+
+        build(tree, _site_config(), source, target)
+
+        listing = target / "index.html"
+        assert listing.exists()
+        content = listing.read_text()
+        assert "img:photo" in content
+        assert "<title>Test Site</title>" in content
+
+    def test_auto_indexed_files_in_expected_set(self, tmp_path):
+        """Auto-indexed pages should not be deleted by sync."""
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source, listing=LISTING_TEMPLATE)
+
+        img = source / "photos" / "a.jpg"
+        img.parent.mkdir()
+        img.write_bytes(b"fake")
+
+        photos = Node(node_type=None, name="photos", source=None, parent=None)
+        photos.children.append(_make_child(NodeType.IMAGE, "a", img, parent=photos))
+        tree = _make_tree(photos)
+
+        # First build
+        build(tree, _site_config(), source, target)
+        assert (target / "photos" / "index.html").exists()
+
+        # Second build — listing should survive sync
+        build(tree, _site_config(), source, target)
+        assert (target / "photos" / "index.html").exists()

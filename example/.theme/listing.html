@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="{{ site.language }}">
+<head>
+    <meta charset="utf-8">
+    <title>{{ page.title }} — {{ site.title }}</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <header>
+        <h1><a href="/">{{ site.title }}</a></h1>
+    </header>
+    <main>
+        <h2>{{ page.title }}</h2>
+        {% if children.directories %}
+        <nav>
+            <h3>Folders</h3>
+            <ul>
+            {% for dir in children.directories %}
+                <li><a href="{{ dir.url }}">{{ dir.name }}</a></li>
+            {% endfor %}
+            </ul>
+        </nav>
+        {% endif %}
+        {% if children.pages %}
+        <section>
+            <h3>Pages</h3>
+            <ul>
+            {% for page in children.pages %}
+                <li><a href="{{ page.url }}">{{ page.title }}</a></li>
+            {% endfor %}
+            </ul>
+        </section>
+        {% endif %}
+        {% if children.images %}
+        <section class="gallery">
+            {% for image in children.images %}
+            <a href="{{ image.url }}">
+                <figure>
+                    <img src="{{ image.src }}" alt="{{ image.alt }}">
+                    <figcaption>{{ image.alt }}</figcaption>
+                </figure>
+            </a>
+            {% endfor %}
+        </section>
+        {% endif %}
+    </main>
+</body>
+</html>

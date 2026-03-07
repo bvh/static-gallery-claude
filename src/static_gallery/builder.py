@@ -47,12 +47,17 @@ def _node_segments(node: Node) -> list[str]:
     return parts
 
 
-def _target_paths(node: Node, target: Path) -> tuple[Path | None, Path | None]:
-    if node.source is None:
-        return None, None
-
+def _target_paths(
+    node: Node, target: Path, *, has_listing: bool = False
+) -> tuple[Path | None, Path | None]:
     segs = _node_segments(node)
     prefix = Path(*segs) if segs else Path(".")
+
+    if node.source is None:
+        if has_listing and node.children:
+            return target / prefix / "index.html", None
+        return None, None
+
     is_index = node.source.name.lower() == "index.md"
 
     if node.node_type == NodeType.MARKDOWN:
@@ -90,13 +95,24 @@ def build(
     except Exception as exc:
         raise GalleryError(f"Cannot load templates from {theme_dir}: {exc}")
 
+    listing_template = _try_load_template(env, "listing")
+
     if force:
         global_mtime = float("inf")
     else:
         global_mtime = _compute_global_mtime(source, config_path)
 
     expected: set[Path] = set()
-    _build_node(tree, site_config, env, target, expected, global_mtime)
+    _build_node(
+        tree,
+        site_config,
+        env,
+        target,
+        expected,
+        global_mtime,
+        source=source,
+        listing_template=listing_template,
+    )
     _sync_target(target, expected)
 
 
@@ -107,8 +123,12 @@ def _build_node(
     target: Path,
     expected: set[Path],
     global_mtime: float,
+    *,
+    source: Path,
+    listing_template: jinja2.Template | None = None,
 ) -> None:
-    html_target, asset_target = _target_paths(node, target)
+    has_listing = listing_template is not None
+    html_target, asset_target = _target_paths(node, target, has_listing=has_listing)
 
     if html_target is not None:
         expected.add(html_target)
@@ -136,9 +156,22 @@ def _build_node(
     elif node.node_type == NodeType.STATIC:
         if not _is_up_to_date(asset_target, node.source, global_mtime, is_html=False):
             _build_static(node, asset_target)
+    elif node.node_type is None and node.children and listing_template is not None:
+        source_dir = source / Path(*_node_segments(node)) if node.name else source
+        if not _is_up_to_date(html_target, source_dir, global_mtime, is_html=True):
+            _build_listing(node, html_target, site_config, listing_template)
 
     for child in node.children:
-        _build_node(child, site_config, env, target, expected, global_mtime)
+        _build_node(
+            child,
+            site_config,
+            env,
+            target,
+            expected,
+            global_mtime,
+            source=source,
+            listing_template=listing_template,
+        )
 
 
 def _load_template(env: jinja2.Environment, name: str) -> jinja2.Template:
@@ -148,6 +181,75 @@ def _load_template(env: jinja2.Environment, name: str) -> jinja2.Template:
         raise GalleryError(f"Missing template: .theme/{name}.html")
     except jinja2.TemplateSyntaxError as exc:
         raise GalleryError(f"Template syntax error in .theme/{name}.html: {exc}")
+
+
+def _try_load_template(env: jinja2.Environment, name: str) -> jinja2.Template | None:
+    try:
+        return env.get_template(f"{name}.html")
+    except jinja2.TemplateNotFound:
+        return None
+    except jinja2.TemplateSyntaxError as exc:
+        raise GalleryError(f"Template syntax error in .theme/{name}.html: {exc}")
+
+
+def _collect_children_data(node: Node) -> dict[str, list[dict[str, str]]]:
+    directories: list[dict[str, str]] = []
+    pages: list[dict[str, str]] = []
+    images: list[dict[str, str]] = []
+
+    for child in node.children:
+        if child.node_type is None and child.children:
+            directories.append({"name": child.name, "url": child.name + "/"})
+        elif child.node_type == NodeType.MARKDOWN:
+            is_index = (
+                child.source is not None and child.source.name.lower() == "index.md"
+            )
+            if is_index:
+                title = child.name.replace("-", " ").replace("_", " ").title()
+                pages.append(
+                    {"name": child.name, "title": title, "url": child.name + "/"}
+                )
+            else:
+                title = child.name.replace("-", " ").replace("_", " ").title()
+                pages.append(
+                    {"name": child.name, "title": title, "url": child.name + ".html"}
+                )
+        elif child.node_type == NodeType.IMAGE:
+            stem = child.source.stem
+            images.append(
+                {
+                    "filename": child.source.name,
+                    "stem": stem,
+                    "alt": stem.replace("-", " ").replace("_", " "),
+                    "url": child.name + ".html",
+                    "src": child.source.name,
+                }
+            )
+
+    return {"directories": directories, "pages": pages, "images": images}
+
+
+def _build_listing(
+    node: Node,
+    html_target: Path,
+    site_config: dict[str, str],
+    listing_template: jinja2.Template,
+) -> None:
+    children_data = _collect_children_data(node)
+    if node.name:
+        title = node.name.replace("-", " ").replace("_", " ").title()
+    else:
+        title = site_config.get("title", "")
+
+    output = listing_template.render(
+        site=site_config, page={"title": title}, children=children_data
+    )
+
+    html_target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        html_target.write_text(output, encoding="utf-8")
+    except OSError as exc:
+        raise GalleryError(f"Cannot write {html_target}: {exc}")
 
 
 def _build_markdown(
