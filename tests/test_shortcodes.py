@@ -4,7 +4,7 @@ import jinja2
 import pytest
 
 from static_gallery.errors import GalleryError
-from static_gallery.shortcodes import expand_shortcodes
+from static_gallery.shortcodes import expand_shortcodes, shortcode_dependencies
 
 IMAGE_TPL = '<img src="{{ path }}" alt="{{ alt }}">'
 CODE_TPL = '<pre><code class="language-{{ language }}">{{ content }}</code></pre>'
@@ -369,3 +369,65 @@ class TestPathTraversal:
             "<<gallery path=photos>>", env, src, meta_cache=mc, source_root=src
         )
         assert "ok.jpg" in result
+
+
+class TestShortcodeDependencies:
+    def test_returns_resolved_paths_for_file_shortcodes(self, src):
+        (src / "example.py").write_text("print('hi')")
+        deps = shortcode_dependencies("Look: <<example.py>>", src)
+        assert deps == {src / "example.py"}
+
+    def test_empty_for_no_shortcodes(self, src):
+        deps = shortcode_dependencies("no shortcodes here", src)
+        assert deps == set()
+
+    def test_multiple_deps(self, src):
+        (src / "a.py").write_text("")
+        (src / "b.csv").write_text("")
+        deps = shortcode_dependencies("<<a.py>>\n<<b.csv>>", src)
+        assert deps == {src / "a.py", src / "b.csv"}
+
+    def test_ignores_missing_files(self, src):
+        deps = shortcode_dependencies("<<missing.py>>", src)
+        assert deps == set()
+
+    def test_ignores_unknown_extensions(self, src):
+        (src / "file.xyz").write_text("")
+        deps = shortcode_dependencies("<<file.xyz>>", src)
+        assert deps == set()
+
+    def test_gallery_deps_include_images(self, src):
+        _img(src, "a.jpg")
+        _img(src, "b.png")
+        deps = shortcode_dependencies("<<gallery>>", src)
+        assert src / "a.jpg" in deps
+        assert src / "b.png" in deps
+
+    def test_gallery_with_path_option(self, src):
+        photos = src / "photos"
+        photos.mkdir()
+        _img(photos, "a.jpg")
+        deps = shortcode_dependencies("<<gallery path=photos>>", src)
+        assert photos / "a.jpg" in deps
+
+    def test_gallery_with_filter_option(self, src):
+        _img(src, "photo.jpg")
+        _img(src, "photo.png")
+        deps = shortcode_dependencies("<<gallery filter=*.jpg>>", src)
+        assert deps == {src / "photo.jpg"}
+
+    def test_path_traversal_excluded(self, src):
+        deps = shortcode_dependencies("<<../../etc/passwd.txt>>", src, source_root=src)
+        assert deps == set()
+
+    def test_gallery_path_traversal_excluded(self, src):
+        deps = shortcode_dependencies("<<gallery path=../../>>", src, source_root=src)
+        assert deps == set()
+
+    def test_gallery_missing_dir_returns_empty(self, src):
+        deps = shortcode_dependencies("<<gallery path=nonexistent>>", src)
+        assert deps == set()
+
+    def test_unknown_directive_returns_empty(self, src):
+        deps = shortcode_dependencies("<<unknown>>", src)
+        assert deps == set()

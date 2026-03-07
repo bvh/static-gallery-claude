@@ -524,6 +524,46 @@ class TestIncrementalBuild:
         build(root, _site_config(), source, target, config_path=conf, force=True)
         assert html.stat().st_mtime > PAST + 500
 
+    def test_rebuild_markdown_when_shortcode_dep_changes(self, tmp_path):
+        source, target, conf = self._setup(tmp_path)
+        (source / "example.py").write_text("print('v1')")
+        md = source / "post.md"
+        md.write_text("Title: Post\n\n<<example.py>>")
+        _set_mtime(md, PAST)
+        _set_mtime(source / "example.py", PAST)
+        _set_theme_mtime(source, PAST)
+        _set_mtime(conf, PAST)
+
+        tree = _make_tree(_make_child(NodeType.MARKDOWN, "post", md))
+        build(tree, _site_config(), source, target, config_path=conf)
+        html = target / "post.html"
+        assert html.exists()
+        _set_mtime(html, PAST + 500)
+
+        # Touch the dependency file — markdown should rebuild
+        _set_mtime(source / "example.py", FUTURE)
+        build(tree, _site_config(), source, target, config_path=conf)
+        assert html.stat().st_mtime > PAST + 500
+
+    def test_skip_markdown_when_shortcode_dep_unchanged(self, tmp_path):
+        source, target, conf = self._setup(tmp_path)
+        (source / "example.py").write_text("print('v1')")
+        md = source / "post.md"
+        md.write_text("Title: Post\n\n<<example.py>>")
+        _set_mtime(md, PAST)
+        _set_mtime(source / "example.py", PAST)
+        _set_theme_mtime(source, PAST)
+        _set_mtime(conf, PAST)
+
+        tree = _make_tree(_make_child(NodeType.MARKDOWN, "post", md))
+        build(tree, _site_config(), source, target, config_path=conf)
+        html = target / "post.html"
+        _set_mtime(html, PAST + 500)
+
+        # Rebuild with nothing changed — should skip
+        build(tree, _site_config(), source, target, config_path=conf)
+        assert html.stat().st_mtime == PAST + 500
+
     def test_expected_set_populated_when_skipping(self, tmp_path):
         """Stale files are still cleaned even when builds are skipped."""
         source, target, conf = self._setup(tmp_path)

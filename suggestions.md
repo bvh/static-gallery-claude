@@ -18,9 +18,9 @@ A user running `--target ./output` (no dot prefix) means the scanner will pick u
 
 ~~`_expand_gallery` uses `source_dir / rel_path` for the `path=` option without verifying the result stays within the source tree. `<<gallery path=../../>>` would scan outside the source root.~~
 
-### Incremental build misses content dependencies
+### ~~Incremental build misses content dependencies~~ (Fixed)
 
-Shortcodes can inline external files (code, text, csv), but the mtime check only considers the markdown source and the global mtime (templates + config). If an inlined file changes but the markdown file doesn't, the page won't be rebuilt. The system would need to track shortcode dependencies or always rebuild pages containing shortcodes.
+~~Shortcodes can inline external files (code, text, csv), but the mtime check only considers the markdown source and the global mtime (templates + config). If an inlined file changes but the markdown file doesn't, the page won't be rebuilt. `shortcode_dependencies()` now scans markdown text for referenced files and gallery images; their mtimes are checked during incremental builds.~~
 
 ## Design
 

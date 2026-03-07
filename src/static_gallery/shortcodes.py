@@ -80,6 +80,69 @@ def _parse_options(raw: str | None) -> dict[str, str | bool]:
     return opts
 
 
+def _resolve_file_path(
+    path_str: str,
+    source_dir: Path,
+    resolved_root: Path | None,
+) -> Path | None:
+    """Resolve a shortcode file path, returning None if invalid or missing."""
+    ext = PurePosixPath(path_str).suffix.lower()
+    if ext not in _SHORTCODE_TYPE_MAP:
+        return None
+    resolved = source_dir / path_str
+    if resolved_root is not None and not resolved.resolve().is_relative_to(
+        resolved_root
+    ):
+        return None
+    if not resolved.is_file():
+        return None
+    return resolved
+
+
+def _resolve_gallery_dir(
+    raw_opts: str | None,
+    source_dir: Path,
+    resolved_root: Path | None,
+) -> tuple[Path, str | None] | None:
+    """Resolve gallery target directory and filter pattern from options.
+
+    Returns (target_dir, filter_pattern) or None on traversal/missing dir.
+    """
+    opts = _parse_options(raw_opts)
+    rel_path = opts.get("path")
+    if isinstance(rel_path, bool):
+        rel_path = None
+    filter_pattern = opts.get("filter")
+    if isinstance(filter_pattern, bool):
+        filter_pattern = None
+
+    target_dir = source_dir / rel_path if rel_path else source_dir
+    if (
+        rel_path
+        and resolved_root is not None
+        and not target_dir.resolve().is_relative_to(resolved_root)
+    ):
+        return None
+    if not target_dir.is_dir():
+        return None
+
+    return target_dir, filter_pattern
+
+
+def _collect_gallery_images(target_dir: Path, filter_pattern: str | None) -> list[Path]:
+    """Collect image files from a directory, optionally filtered by glob."""
+    images = []
+    for entry in target_dir.iterdir():
+        if not entry.is_file():
+            continue
+        if entry.suffix.lower() not in IMAGE_EXTENSIONS:
+            continue
+        if filter_pattern and not fnmatch.fnmatch(entry.name, filter_pattern):
+            continue
+        images.append(entry)
+    return images
+
+
 def _expand_gallery(
     raw_opts: str | None,
     *,
@@ -93,7 +156,6 @@ def _expand_gallery(
     if sort_key not in ("name", "date"):
         raise GalleryError(f"Unknown gallery sort key: {sort_key}")
     reverse = bool(opts.get("reverse", False))
-    filter_pattern = opts.get("filter")
     rel_path = opts.get("path")
 
     target_dir = source_dir / rel_path if rel_path else source_dir
@@ -106,15 +168,10 @@ def _expand_gallery(
     if not target_dir.is_dir():
         raise GalleryError(f"Gallery directory not found: {target_dir}")
 
-    images = []
-    for entry in target_dir.iterdir():
-        if not entry.is_file():
-            continue
-        if entry.suffix.lower() not in IMAGE_EXTENSIONS:
-            continue
-        if filter_pattern and not fnmatch.fnmatch(entry.name, filter_pattern):
-            continue
-        images.append(entry)
+    filter_pattern = opts.get("filter")
+    if isinstance(filter_pattern, bool):
+        filter_pattern = None
+    images = _collect_gallery_images(target_dir, filter_pattern)
 
     if sort_key == "name":
         images.sort(key=lambda p: p.name.lower(), reverse=reverse)
@@ -154,6 +211,34 @@ def _expand_gallery(
 _DIRECTIVE_HANDLERS = {
     "gallery": _expand_gallery,
 }
+
+
+def shortcode_dependencies(
+    body: str,
+    source_dir: Path,
+    source_root: Path | None = None,
+) -> set[Path]:
+    """Return resolved file paths referenced by shortcodes in body text."""
+    resolved_root = source_root.resolve() if source_root is not None else None
+    deps: set[Path] = set()
+
+    for match in _SHORTCODE_RE.finditer(body):
+        path_str = match.group(1)
+        raw_opts = match.group(2)
+
+        if "." not in path_str:
+            if path_str == "gallery":
+                result = _resolve_gallery_dir(raw_opts, source_dir, resolved_root)
+                if result is not None:
+                    target_dir, filter_pattern = result
+                    deps.update(_collect_gallery_images(target_dir, filter_pattern))
+            continue
+
+        resolved = _resolve_file_path(path_str, source_dir, resolved_root)
+        if resolved is not None:
+            deps.add(resolved)
+
+    return deps
 
 
 def expand_shortcodes(

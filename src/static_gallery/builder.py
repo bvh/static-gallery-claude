@@ -16,7 +16,7 @@ from static_gallery.metadata import (
     resolve_title,
     stem_to_title,
 )
-from static_gallery.shortcodes import expand_shortcodes
+from static_gallery.shortcodes import expand_shortcodes, shortcode_dependencies
 from static_gallery.errors import GalleryError
 from static_gallery.model import IMAGE_EXTENSIONS, Node, NodeType
 
@@ -34,13 +34,20 @@ def _compute_global_mtime(source: Path, config_path: Path | None) -> float:
 
 
 def _is_up_to_date(
-    target_path: Path, source_path: Path, global_mtime: float, is_html: bool
+    target_path: Path,
+    source_path: Path,
+    global_mtime: float,
+    is_html: bool,
+    *,
+    extra_mtime: float = 0.0,
 ) -> bool:
     if not target_path.exists():
         return False
     target_mtime = target_path.stat().st_mtime
     if is_html:
-        return target_mtime >= max(source_path.stat().st_mtime, global_mtime)
+        return target_mtime >= max(
+            source_path.stat().st_mtime, global_mtime, extra_mtime
+        )
     return target_mtime >= source_path.stat().st_mtime
 
 
@@ -147,8 +154,22 @@ def _build_node(
         expected.add(asset_target)
 
     if node.node_type == NodeType.MARKDOWN and node.source is not None:
-        if not _is_up_to_date(html_target, node.source, global_mtime, is_html=True):
-            _build_markdown(node, html_target, site_config, env, meta_cache, source)
+        # Read source early to check shortcode dependency mtimes
+        try:
+            text = node.source.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise GalleryError(f"Cannot read {node.source}: {exc}")
+        deps = shortcode_dependencies(text, node.source.parent, source)
+        try:
+            dep_mtime = max((p.stat().st_mtime for p in deps), default=0.0)
+        except OSError as exc:
+            raise GalleryError(f"Cannot stat shortcode dependency: {exc}")
+        if not _is_up_to_date(
+            html_target, node.source, global_mtime, is_html=True, extra_mtime=dep_mtime
+        ):
+            _build_markdown(
+                node, html_target, site_config, env, meta_cache, source, text
+            )
     elif node.node_type == NodeType.IMAGE:
         skip_html = _is_up_to_date(html_target, node.source, global_mtime, is_html=True)
         skip_asset = _is_up_to_date(
@@ -273,12 +294,8 @@ def _build_markdown(
     env: jinja2.Environment,
     meta_cache: dict[Path, dict[str, dict]],
     source_root: Path,
+    text: str,
 ) -> None:
-    try:
-        text = node.source.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise GalleryError(f"Cannot read {node.source}: {exc}")
-
     metadata, body = parse_front_matter(text)
     body = expand_shortcodes(body, env, node.source.parent, meta_cache, source_root)
     html_content = mistletoe.markdown(body)
