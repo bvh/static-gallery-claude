@@ -1,5 +1,8 @@
-from static_gallery.scanner import scan
+import pytest
+
+from static_gallery.errors import GalleryError
 from static_gallery.model import NodeType
+from static_gallery.scanner import scan
 
 
 def _make_file(path, content=""):
@@ -142,8 +145,8 @@ class TestScan:
     def test_all_image_extensions(self, tmp_path):
         source = tmp_path / "source"
         source.mkdir()
-        for ext in (".jpeg", ".jpg", ".webp", ".png"):
-            _make_file(source / f"img{ext}", "fake")
+        for i, ext in enumerate((".jpeg", ".jpg", ".webp", ".png")):
+            _make_file(source / f"img{i}{ext}", "fake")
 
         tree = scan(source, "site.conf")
         files = _all_source_nodes(tree)
@@ -241,10 +244,34 @@ class TestScan:
         _make_file(source / "photo.jpg", "fake jpg")
         _make_file(source / "photo.png", "fake png")
 
+        with pytest.raises(
+            GalleryError, match=r"Multiple images with stem 'photo' in \.:"
+        ):
+            scan(source, "site.conf")
+
+    def test_multiple_images_same_stem_case_insensitive(self, tmp_path):
+        source = tmp_path / "source"
+        source.mkdir()
+        _make_file(source / "Photo.jpg", "fake jpg")
+        _make_file(source / "photo.png", "fake png")
+
+        with pytest.raises(GalleryError, match="Multiple images with stem 'photo'"):
+            scan(source, "site.conf")
+
+    def test_multiple_images_same_stem_with_markdown_collision(self, tmp_path):
+        source = tmp_path / "source"
+        source.mkdir()
+        _make_file(source / "photo.md", "# Photo")
+        _make_file(source / "photo.jpg", "fake jpg")
+        _make_file(source / "photo.png", "fake png")
+
         tree = scan(source, "site.conf")
         files = _all_source_nodes(tree)
+        # Both images demoted to STATIC, no collision error
         image_files = [f for f in files if f.node_type == NodeType.IMAGE]
-        assert len(image_files) == 2
+        assert len(image_files) == 0
+        static_files = [f for f in files if f.node_type == NodeType.STATIC]
+        assert len(static_files) == 2
 
     def test_config_filename_none(self, tmp_path):
         source = tmp_path / "source"

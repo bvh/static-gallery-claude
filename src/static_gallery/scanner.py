@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from static_gallery.errors import GalleryError
 from static_gallery.model import IMAGE_EXTENSIONS, Node, NodeType
 
 
@@ -78,6 +79,18 @@ def scan(source: Path, config_filename: str | None) -> Node:
         for path in other_files:
             if _classify(path) == NodeType.MARKDOWN:
                 md_stems.add(path.stem.lower())
+
+        # Detect image-stem collisions
+        image_stems: dict[str, list[Path]] = {}
+        for path in other_files:
+            if _classify(path) == NodeType.IMAGE and path.stem.lower() not in md_stems:
+                image_stems.setdefault(path.stem.lower(), []).append(path)
+        for stem, paths in image_stems.items():
+            if len(paths) > 1:
+                names = ", ".join(p.name for p in paths)
+                raise GalleryError(
+                    f"Multiple images with stem '{stem}' in {parent_rel}: {names}"
+                )
 
         # Create child nodes
         for path in other_files:

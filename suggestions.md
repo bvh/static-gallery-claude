@@ -2,9 +2,9 @@
 
 ## Bugs
 
-### Same-stem images silently collide on HTML target
+### ~~Same-stem images silently collide on HTML target~~ (Fixed)
 
-If `photo.jpg` and `photo.png` exist in the same directory, both are classified as `IMAGE` (confirmed by `test_multiple_images_same_stem`), but both map to `photo.html` in the target. The second write silently overwrites the first. The scanner should detect this and either raise an error or demote all but one to `STATIC`, similar to the existing markdown-over-image collision logic.
+~~The scanner now detects duplicate image stems per directory and raises `GalleryError` listing the conflicting files. Images demoted to STATIC by markdown collision are excluded from the check. Case-insensitive.~~
 
 ### Path traversal in shortcodes
 
