@@ -38,6 +38,15 @@ def stem_to_alt(stem: str) -> str:
     return stem.replace("-", " ").replace("_", " ")
 
 
+def get_image_metadata(
+    path: Path, cache: dict[Path, dict[str, dict]]
+) -> dict[str, dict]:
+    """Cached wrapper around read_image_metadata."""
+    if path not in cache:
+        cache[path] = read_image_metadata(path)
+    return cache[path]
+
+
 def read_image_metadata(path: Path) -> dict[str, dict]:
     """Read EXIF, IPTC, and XMP metadata from an image file.
 

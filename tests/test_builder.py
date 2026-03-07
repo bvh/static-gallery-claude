@@ -735,7 +735,7 @@ class TestImageMetadata:
         )
 
         with patch(
-            "static_gallery.builder.read_image_metadata", return_value=MOCK_METADATA
+            "static_gallery.metadata.read_image_metadata", return_value=MOCK_METADATA
         ):
             build(tree, _site_config(), source, target)
 
@@ -758,7 +758,7 @@ class TestImageMetadata:
         )
 
         with patch(
-            "static_gallery.builder.read_image_metadata", return_value=MOCK_METADATA
+            "static_gallery.metadata.read_image_metadata", return_value=MOCK_METADATA
         ):
             build(tree, _site_config(), source, target)
 
@@ -786,7 +786,7 @@ class TestImageMetadata:
         tree = _make_tree(photos)
 
         with patch(
-            "static_gallery.builder.read_image_metadata", return_value=MOCK_METADATA
+            "static_gallery.metadata.read_image_metadata", return_value=MOCK_METADATA
         ):
             build(tree, _site_config(), source, target)
 
@@ -810,7 +810,7 @@ class TestImageMetadata:
 
         empty_meta = {"exif": {}, "iptc": {}, "xmp": {}}
         with patch(
-            "static_gallery.builder.read_image_metadata", return_value=empty_meta
+            "static_gallery.metadata.read_image_metadata", return_value=empty_meta
         ):
             build(tree, _site_config(), source, target)
 

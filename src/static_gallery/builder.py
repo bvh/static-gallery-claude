@@ -11,7 +11,7 @@ import mistletoe
 from static_gallery.config import parse_front_matter
 from static_gallery.metadata import (
     copy_image_stripped,
-    read_image_metadata,
+    get_image_metadata,
     resolve_alt,
     resolve_title,
     stem_to_title,
@@ -148,7 +148,7 @@ def _build_node(
 
     if node.node_type == NodeType.MARKDOWN and node.source is not None:
         if not _is_up_to_date(html_target, node.source, global_mtime, is_html=True):
-            _build_markdown(node, html_target, site_config, env)
+            _build_markdown(node, html_target, site_config, env, meta_cache)
     elif node.node_type == NodeType.IMAGE:
         skip_html = _is_up_to_date(html_target, node.source, global_mtime, is_html=True)
         skip_asset = _is_up_to_date(
@@ -205,14 +205,6 @@ def _try_load_template(env: jinja2.Environment, name: str) -> jinja2.Template | 
         raise GalleryError(f"Template syntax error in .theme/{name}.html: {exc}")
 
 
-def _get_image_metadata(
-    path: Path, cache: dict[Path, dict[str, dict]]
-) -> dict[str, dict]:
-    if path not in cache:
-        cache[path] = read_image_metadata(path)
-    return cache[path]
-
-
 def _collect_children_data(
     node: Node, meta_cache: dict[Path, dict[str, dict]]
 ) -> dict[str, list[dict[str, Any]]]:
@@ -232,7 +224,7 @@ def _collect_children_data(
             pages.append({"name": child.name, "title": title, "url": url})
         elif child.node_type == NodeType.IMAGE:
             stem = child.source.stem
-            image_meta = _get_image_metadata(child.source, meta_cache)
+            image_meta = get_image_metadata(child.source, meta_cache)
             title = resolve_title(stem, image_meta)
             alt = resolve_alt(stem, image_meta)
             images.append(
@@ -279,6 +271,7 @@ def _build_markdown(
     html_target: Path,
     site_config: dict[str, str],
     env: jinja2.Environment,
+    meta_cache: dict[Path, dict[str, dict]],
 ) -> None:
     try:
         text = node.source.read_text(encoding="utf-8")
@@ -286,7 +279,7 @@ def _build_markdown(
         raise GalleryError(f"Cannot read {node.source}: {exc}")
 
     metadata, body = parse_front_matter(text)
-    body = expand_shortcodes(body, env, node.source.parent)
+    body = expand_shortcodes(body, env, node.source.parent, meta_cache)
     html_content = mistletoe.markdown(body)
 
     template_type = metadata.get("type", "page")
@@ -319,7 +312,7 @@ def _build_image(
     if not skip_html:
         stem = node.source.stem
         filename = node.source.name
-        image_meta = _get_image_metadata(node.source, meta_cache)
+        image_meta = get_image_metadata(node.source, meta_cache)
         title = resolve_title(stem, image_meta)
 
         metadata = {"title": title, "src": filename, **image_meta}

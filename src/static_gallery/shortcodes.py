@@ -8,7 +8,12 @@ from pathlib import Path, PurePosixPath
 import jinja2
 
 from static_gallery.errors import GalleryError
-from static_gallery.metadata import stem_to_alt
+from static_gallery.metadata import (
+    get_image_metadata,
+    resolve_alt,
+    resolve_title,
+    stem_to_alt,
+)
 from static_gallery.model import IMAGE_EXTENSIONS
 
 _SHORTCODE_RE = re.compile(r"<<\s*([^\s>]+)(?:\s+(.+?))?\s*>>")
@@ -76,7 +81,10 @@ def _parse_options(raw: str | None) -> dict[str, str | bool]:
 
 
 def _expand_gallery(
-    raw_opts: str | None, env: jinja2.Environment, source_dir: Path
+    raw_opts: str | None,
+    env: jinja2.Environment,
+    source_dir: Path,
+    meta_cache: dict[Path, dict[str, dict]],
 ) -> str:
     opts = _parse_options(raw_opts)
     sort_key = opts.get("sort", "name")
@@ -108,14 +116,19 @@ def _expand_gallery(
     items = []
     for img in images:
         stem = img.stem
+        image_meta = get_image_metadata(img, meta_cache)
         items.append(
             {
                 "path": str(img.relative_to(source_dir)),
                 "filename": img.name,
                 "stem": stem,
                 "extension": img.suffix.lower(),
-                "alt": stem_to_alt(stem),
+                "alt": resolve_alt(stem, image_meta),
+                "title": resolve_title(stem, image_meta),
                 "page_url": f"{stem}.html",
+                "exif": image_meta["exif"],
+                "iptc": image_meta["iptc"],
+                "xmp": image_meta["xmp"],
             }
         )
 
@@ -135,7 +148,15 @@ _DIRECTIVE_HANDLERS = {
 }
 
 
-def expand_shortcodes(body: str, env: jinja2.Environment, source_dir: Path) -> str:
+def expand_shortcodes(
+    body: str,
+    env: jinja2.Environment,
+    source_dir: Path,
+    meta_cache: dict[Path, dict[str, dict]] | None = None,
+) -> str:
+    if meta_cache is None:
+        meta_cache = {}
+
     def _replace(match: re.Match) -> str:
         path_str = match.group(1)
         raw_opts = match.group(2)
@@ -144,7 +165,7 @@ def expand_shortcodes(body: str, env: jinja2.Environment, source_dir: Path) -> s
             handler = _DIRECTIVE_HANDLERS.get(path_str)
             if handler is None:
                 raise GalleryError(f"Unknown shortcode directive: {path_str}")
-            return handler(raw_opts, env, source_dir)
+            return handler(raw_opts, env, source_dir, meta_cache)
 
         alt = raw_opts
         pp = PurePosixPath(path_str)
