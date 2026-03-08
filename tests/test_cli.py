@@ -335,6 +335,21 @@ class TestResolveDirs:
         with pytest.raises(GalleryError, match="inside source"):
             _resolve_dirs(args)
 
+    def test_internal_keys_stripped_from_config(self, tmp_path):
+        source = tmp_path / "site"
+        source.mkdir()
+        (source / "site.conf").write_text(
+            "title: Test\nurl: https://example.com/\nlanguage: en-us\n"
+            "source: .\ntarget: ../out\ntheme: .theme\n"
+        )
+
+        args = _make_args(source=source)
+        src, tgt, theme, cfg, conf = _resolve_dirs(args)
+        assert "source" not in conf
+        assert "target" not in conf
+        assert "theme" not in conf
+        assert conf["title"] == "Test"
+
     def test_cli_flags_override_config(self, tmp_path):
         source = tmp_path / "site"
         source.mkdir()

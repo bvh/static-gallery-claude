@@ -6,10 +6,6 @@
 
 ## Design
 
-### Config keys `source`, `target`, `theme` leak into template context
-
-`parse_config` returns all keys from site.conf. The new `source`, `target`, and `theme` directory keys end up in `site_config`, which is passed to every template as `{{ site.source }}` etc. This exposes filesystem paths in rendered HTML and could hijack a site that already uses one of these key names for display purposes. Consider stripping the directory keys from `site_config` after resolving them in `_resolve_dirs`.
-
 ### Front matter parsing is mutated in `builder.py`
 
 `del metadata["type"]` in `_build_markdown` is a side effect hidden in the build step. Extracting the template type should happen more explicitly, or `parse_front_matter` could return it separately.

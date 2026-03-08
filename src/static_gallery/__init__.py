@@ -111,4 +111,7 @@ def _resolve_dirs(
     else:
         theme_dir = (source / ".theme").resolve()
 
+    for key in ("source", "target", "theme"):
+        site_config.pop(key, None)
+
     return source, target, theme_dir, config_path, site_config
