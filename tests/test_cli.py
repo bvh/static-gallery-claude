@@ -273,6 +273,8 @@ def _make_args(**kwargs):
         "config": None,
         "theme": None,
         "force": False,
+        "verbose": False,
+        "dry_run": False,
         "stage": False,
         "port": 8000,
     }

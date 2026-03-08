@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -30,6 +31,8 @@ class BuildContext:
     meta_cache: dict[Path, dict[str, dict]] = field(default_factory=dict)
     expected: set[Path] = field(default_factory=set)
     listing_template: jinja2.Template | None = None
+    verbose: bool = False
+    dry_run: bool = False
 
 
 def build(
@@ -41,6 +44,8 @@ def build(
     config_path: Path | None = None,
     force: bool = False,
     theme_dir: Path | None = None,
+    verbose: bool = False,
+    dry_run: bool = False,
 ) -> set[Path]:
     if theme_dir is None:
         theme_dir = source / ".theme"
@@ -64,6 +69,8 @@ def build(
         target=target,
         global_mtime=global_mtime,
         listing_template=try_load_template(env, "listing"),
+        verbose=verbose,
+        dry_run=dry_run,
     )
 
     _copy_theme_assets(ctx, theme_dir)
@@ -84,7 +91,13 @@ def _copy_theme_assets(ctx: BuildContext, theme_dir: Path) -> None:
         target_file = ctx.target / rel
         ctx.expected.add(target_file)
         if not is_up_to_date(target_file, source_file, ctx.global_mtime, is_html=False):
-            build_static_file(source_file, target_file)
+            if ctx.verbose:
+                prefix = "Would build" if ctx.dry_run else "Build"
+                print(f"{prefix}: {target_file}", file=sys.stderr)
+            if not ctx.dry_run:
+                build_static_file(source_file, target_file)
+        elif ctx.verbose:
+            print(f"Skip: {target_file}", file=sys.stderr)
 
 
 def _build_node(node: Node, ctx: BuildContext) -> None:
@@ -113,15 +126,21 @@ def _build_node(node: Node, ctx: BuildContext) -> None:
             is_html=True,
             extra_mtime=dep_mtime,
         ):
-            build_markdown(
-                node,
-                html_target,
-                ctx.site_config,
-                ctx.env,
-                ctx.meta_cache,
-                ctx.source,
-                text,
-            )
+            if ctx.verbose:
+                prefix = "Would build" if ctx.dry_run else "Build"
+                print(f"{prefix}: {html_target}", file=sys.stderr)
+            if not ctx.dry_run:
+                build_markdown(
+                    node,
+                    html_target,
+                    ctx.site_config,
+                    ctx.env,
+                    ctx.meta_cache,
+                    ctx.source,
+                    text,
+                )
+        elif ctx.verbose:
+            print(f"Skip: {html_target}", file=sys.stderr)
     elif node.node_type == NodeType.IMAGE:
         skip_html = is_up_to_date(
             html_target, node.source, ctx.global_mtime, is_html=True
@@ -130,29 +149,55 @@ def _build_node(node: Node, ctx: BuildContext) -> None:
             asset_target, node.source, ctx.global_mtime, is_html=False
         )
         if not skip_html or not skip_asset:
-            build_image(
-                node,
-                html_target,
-                asset_target,
-                ctx.site_config,
-                ctx.env,
-                ctx.meta_cache,
-                skip_html=skip_html,
-                skip_asset=skip_asset,
-            )
+            if ctx.verbose:
+                prefix = "Would build" if ctx.dry_run else "Build"
+                if not skip_html:
+                    print(f"{prefix}: {html_target}", file=sys.stderr)
+                if not skip_asset:
+                    print(f"{prefix}: {asset_target}", file=sys.stderr)
+            if not ctx.dry_run:
+                build_image(
+                    node,
+                    html_target,
+                    asset_target,
+                    ctx.site_config,
+                    ctx.env,
+                    ctx.meta_cache,
+                    skip_html=skip_html,
+                    skip_asset=skip_asset,
+                )
+        elif ctx.verbose:
+            print(f"Skip: {html_target}", file=sys.stderr)
+            print(f"Skip: {asset_target}", file=sys.stderr)
     elif node.node_type == NodeType.STATIC:
         if not is_up_to_date(
             asset_target, node.source, ctx.global_mtime, is_html=False
         ):
-            build_static(node, asset_target)
+            if ctx.verbose:
+                prefix = "Would build" if ctx.dry_run else "Build"
+                print(f"{prefix}: {asset_target}", file=sys.stderr)
+            if not ctx.dry_run:
+                build_static(node, asset_target)
+        elif ctx.verbose:
+            print(f"Skip: {asset_target}", file=sys.stderr)
     elif node.node_type is None and node.children and has_listing:
         source_dir = (
             ctx.source / Path(*node_segments(node)) if node.name else ctx.source
         )
         if not is_up_to_date(html_target, source_dir, ctx.global_mtime, is_html=True):
-            build_listing(
-                node, html_target, ctx.site_config, ctx.listing_template, ctx.meta_cache
-            )
+            if ctx.verbose:
+                prefix = "Would build" if ctx.dry_run else "Build"
+                print(f"{prefix}: {html_target}", file=sys.stderr)
+            if not ctx.dry_run:
+                build_listing(
+                    node,
+                    html_target,
+                    ctx.site_config,
+                    ctx.listing_template,
+                    ctx.meta_cache,
+                )
+        elif ctx.verbose:
+            print(f"Skip: {html_target}", file=sys.stderr)
 
     for child in node.children:
         _build_node(child, ctx)

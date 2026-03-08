@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import os
 import shutil
 import sys
@@ -69,6 +70,17 @@ def read_image_metadata(path: Path) -> dict[str, dict]:
     except Exception as exc:
         print(f"Warning: could not read metadata from {path}: {exc}", file=sys.stderr)
     return result
+
+
+def resolve_date(path: Path, metadata: dict[str, dict]) -> float:
+    """EXIF DateTimeOriginal if available, else filesystem mtime."""
+    dto = metadata.get("exif", {}).get("DateTimeOriginal")
+    if dto and isinstance(dto, str):
+        try:
+            return datetime.datetime.strptime(dto, "%Y:%m:%d %H:%M:%S").timestamp()
+        except ValueError:
+            pass
+    return os.path.getmtime(path)
 
 
 def resolve_title(stem: str, metadata: dict[str, dict]) -> str:

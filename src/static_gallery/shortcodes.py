@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import fnmatch
-import os
 import re
 import sys
 from pathlib import Path, PurePosixPath
@@ -12,12 +11,15 @@ from static_gallery.errors import GalleryError
 from static_gallery.metadata import (
     get_image_metadata,
     resolve_alt,
+    resolve_date,
     resolve_title,
     stem_to_alt,
 )
 from static_gallery.model import IMAGE_EXTENSIONS
 
 _SHORTCODE_RE = re.compile(r"<<\s*([^\s>]+)(?:\s+(.+?))?\s*>>")
+
+_ESCAPE_PLACEHOLDER = "\x00ESCAPED_SHORTCODE\x00"
 
 _SHORTCODE_IMAGE_EXTENSIONS = IMAGE_EXTENSIONS | {".gif", ".svg"}
 
@@ -172,7 +174,10 @@ def _expand_gallery(
     if sort_key == "name":
         images.sort(key=lambda p: p.name.lower(), reverse=reverse)
     elif sort_key == "date":
-        images.sort(key=lambda p: os.path.getmtime(p), reverse=reverse)
+        images.sort(
+            key=lambda p: resolve_date(p, get_image_metadata(p, meta_cache)),
+            reverse=reverse,
+        )
 
     items = []
     for img in images:
@@ -217,6 +222,7 @@ def shortcode_dependencies(
     """Return resolved file paths referenced by shortcodes in body text."""
     resolved_root = source_root.resolve() if source_root is not None else None
     deps: set[Path] = set()
+    body = body.replace("\\<<", "")
 
     for match in _SHORTCODE_RE.finditer(body):
         path_str = match.group(1)
@@ -247,6 +253,7 @@ def expand_shortcodes(
     if meta_cache is None:
         meta_cache = {}
     resolved_root = source_root.resolve() if source_root is not None else None
+    body = body.replace("\\<<", _ESCAPE_PLACEHOLDER)
 
     def _replace(match: re.Match) -> str:
         path_str = match.group(1)
@@ -310,4 +317,4 @@ def expand_shortcodes(
 
         return template.render(**context)
 
-    return _SHORTCODE_RE.sub(_replace, body)
+    return _SHORTCODE_RE.sub(_replace, body).replace(_ESCAPE_PLACEHOLDER, "<<")

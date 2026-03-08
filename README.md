@@ -43,6 +43,12 @@ files newer than their target are rebuilt)
 `--stage`: build the site and serve it locally via a built-in HTTP server.
 The server runs until stopped with Ctrl+C.
 
+`--verbose` / `-v`: print build actions (Build/Skip/Delete/Remove) to
+stderr. Useful for seeing what the system is doing.
+
+`--dry-run`: show what would be built, deleted, or removed without actually
+writing any files. Implies `--verbose`.
+
 `--port`: set the port for the staging server (default is `8000`). Only
 meaningful with `--stage`.
 
@@ -133,6 +139,13 @@ The following variables are available within templates:
   metadata (image files)
 * **content** — the rendered HTML body (for markdown files) or the image
   path (for image files)
+* **breadcrumbs** — a list of ancestor entries, each with `name` and `url`
+  keys. The first entry is always the site root (`{"name": "<site title>",
+  "url": "/"}`), followed by each parent directory. Available in page,
+  image, and listing templates.
+* **prev** / **next** — (image templates only) dicts with `url`, `title`,
+  and `src` keys linking to the previous/next image in the same directory,
+  or `None` if at the boundary.
 * **generator** — a dict with `name` and `version` keys identifying the
   generator (e.g., `{"name": "Static Gallery", "version": "0.9.0"}`)
 
@@ -169,6 +182,12 @@ If stripping fails, the image is copied as-is with a warning to stderr.
 Shortcodes embed content directly into markdown using `<< >>` syntax. They
 are expanded before markdown parsing, and each type is rendered through a
 Jinja template in `.theme/shortcodes/`.
+
+### Escaping Shortcodes
+
+To include a literal `<<` in your markdown without triggering shortcode
+expansion, escape it with a backslash: `\<<`. The backslash is consumed and
+the `<<` is output as-is.
 
 ### File Shortcodes
 
@@ -217,6 +236,10 @@ with each image linking to its generated HTML page:
 | `reverse` | bare flag      | false       | Reverse sort order               |
 | `filter`  | glob pattern   | none        | Filter filenames (e.g. `*.jpg`)  |
 | `path`    | relative path  | current dir | Directory to scan                |
+
+When sorting by `date`, the EXIF `DateTimeOriginal` field is used if
+present; otherwise the file's filesystem modification time is used as a
+fallback.
 
 The gallery is rendered through `.theme/shortcodes/gallery.html`, which
 receives an `images` list (each with `path`, `filename`, `stem`,

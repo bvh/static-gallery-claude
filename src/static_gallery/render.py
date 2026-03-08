@@ -24,6 +24,22 @@ from static_gallery.model import IMAGE_EXTENSIONS, Node, NodeType
 GENERATOR = {"name": "Static Gallery", "version": _pkg_version("static-gallery")}
 
 
+def _breadcrumbs(node: Node, site_config: dict[str, str]) -> list[dict[str, str]]:
+    ancestors = []
+    current = node.parent
+    while current is not None and current.name:
+        ancestors.append(current.name)
+        current = current.parent
+    ancestors.reverse()
+
+    crumbs: list[dict[str, str]] = [{"name": site_config.get("title", ""), "url": "/"}]
+    path = ""
+    for name in ancestors:
+        path += name + "/"
+        crumbs.append({"name": name, "url": "/" + path})
+    return crumbs
+
+
 def load_template(env: jinja2.Environment, name: str) -> jinja2.Template:
     try:
         return env.get_template(f"{name}.html")
@@ -54,6 +70,14 @@ def _collect_children_data(
             directories.append({"name": child.name, "url": child.name + "/"})
         elif child.node_type == NodeType.MARKDOWN:
             title = stem_to_title(child.name)
+            if child.source is not None:
+                try:
+                    text = child.source.read_text(encoding="utf-8")
+                    fm, _ = parse_front_matter(text)
+                    if "title" in fm:
+                        title = fm["title"]
+                except OSError:
+                    pass
             url = child.name + ("/" if child.is_index else ".html")
             pages.append({"name": child.name, "title": title, "url": url})
         elif child.node_type == NodeType.IMAGE:
@@ -76,6 +100,31 @@ def _collect_children_data(
     return {"directories": directories, "pages": pages, "images": images}
 
 
+def _image_siblings(
+    node: Node, meta_cache: dict[Path, dict[str, dict]]
+) -> tuple[dict[str, str] | None, dict[str, str] | None]:
+    if node.parent is None:
+        return None, None
+    images = [c for c in node.parent.children if c.node_type == NodeType.IMAGE]
+    try:
+        idx = images.index(node)
+    except ValueError:
+        return None, None
+
+    def _nav(n: Node) -> dict[str, str]:
+        stem = n.source.stem
+        meta = get_image_metadata(n.source, meta_cache)
+        return {
+            "url": n.name + ".html",
+            "title": resolve_title(stem, meta),
+            "src": n.source.name,
+        }
+
+    prev = _nav(images[idx - 1]) if idx > 0 else None
+    nxt = _nav(images[idx + 1]) if idx < len(images) - 1 else None
+    return prev, nxt
+
+
 def build_listing(
     node: Node,
     html_target: Path,
@@ -93,6 +142,7 @@ def build_listing(
         site=site_config,
         page={"title": title},
         children=children_data,
+        breadcrumbs=_breadcrumbs(node, site_config),
         generator=GENERATOR,
     )
 
@@ -124,6 +174,7 @@ def build_markdown(
         site=site_config,
         page=page_context,
         content=Markup(html_content),
+        breadcrumbs=_breadcrumbs(node, site_config),
         generator=GENERATOR,
     )
 
@@ -153,11 +204,15 @@ def build_image(
 
         metadata = {"title": title, "src": filename, **image_meta}
         template = load_template(env, "image")
+        prev, nxt = _image_siblings(node, meta_cache)
 
         output = template.render(
             site=site_config,
             page=metadata,
             content=filename,
+            breadcrumbs=_breadcrumbs(node, site_config),
+            prev=prev,
+            next=nxt,
             generator=GENERATOR,
         )
 

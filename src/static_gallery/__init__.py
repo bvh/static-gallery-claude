@@ -47,6 +47,19 @@ def main() -> None:
         help="force full rebuild, ignoring file timestamps",
     )
     parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        default=False,
+        help="print build actions to stderr",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="show what would be built without writing any files",
+    )
+    parser.add_argument(
         "--stage",
         action="store_true",
         default=False,
@@ -63,8 +76,12 @@ def main() -> None:
 
     try:
         source, target, theme_dir, config_path, site_config = _resolve_dirs(args)
+        verbose = args.verbose or args.dry_run
 
-        target.mkdir(parents=True, exist_ok=True)
+        if not args.dry_run:
+            target.mkdir(parents=True, exist_ok=True)
+        # Safe to skip mkdir in dry-run: is_up_to_date returns False for
+        # nonexistent targets, so everything reports "Would build" correctly.
 
         config_filename = config_path.name if config_path.parent == source else None
         tree = scan(source, config_filename)
@@ -77,8 +94,10 @@ def main() -> None:
             config_path=config_path,
             force=args.force,
             theme_dir=theme_dir,
+            verbose=verbose,
+            dry_run=args.dry_run,
         )
-        sync_target(target, expected)
+        sync_target(target, expected, verbose=verbose, dry_run=args.dry_run)
     except GalleryError as exc:
         print(exc, file=sys.stderr)
         sys.exit(1)
