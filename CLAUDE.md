@@ -22,7 +22,11 @@ Static Gallery is a static site generator in Python with first-class image/galle
 - `__init__.py` — CLI entry point (`main`). Parses args, wires together config → scan → build.
 - `config.py` — Parses `site.conf` (key:value, split on first colon, case-insensitive keys, `#` comments) and markdown front matter (same format, no comments, terminated by blank line). Shared `_parse_line` helper.
 - `scanner.py` — `scan()` walks the source tree with `rglob`, classifies files by extension, and returns a `Node` tree. Skips dotfiles/dotdirs and the config file.
-- `builder.py` — `build()` walks the `Node` tree, renders markdown/image pages through Jinja templates, copies static assets, then syncs the target directory (removes orphans).
+- `builder.py` — `build()` orchestrates the build: walks the `Node` tree, delegates rendering/copying to submodules, then syncs the target. Contains `BuildContext` dataclass shared across the pipeline.
+- `render.py` — Rendering functions (`build_markdown`, `build_image`, `build_listing`, `build_static`) that produce output files through Jinja templates.
+- `paths.py` — Path computation helpers (`node_segments`, `target_paths`) mapping nodes to target file locations.
+- `freshness.py` — Incremental build logic (`compute_global_mtime`, `is_up_to_date`) for timestamp-based skip decisions.
+- `sync.py` — `sync_target()` removes orphaned files and empty directories from the target after a build.
 - `model.py` — `Node` dataclass (tree structure), `NodeType` enum (`MARKDOWN`, `IMAGE`, `STATIC`), and `IMAGE_EXTENSIONS` constant.
 - `metadata.py` — Image metadata extraction via `pyexiv2`. Reads EXIF/IPTC/XMP, resolves titles and alt text from metadata with filename-stem fallbacks, and strips metadata on copy (keeping only artist/copyright/description/date).
 - `shortcodes.py` — Expands `<< >>` shortcodes in markdown before parsing. Handles file embeds (image, code, text, csv) and the `<<gallery>>` directive. Each type renders through a Jinja template in `.theme/shortcodes/`.
