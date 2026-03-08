@@ -41,6 +41,7 @@ Static Gallery is a static site generator in Python with first-class image/galle
 - **Shortcode expansion**: Shortcodes are expanded in markdown body text before CommonMark parsing. File shortcodes resolve relative to the markdown file's source directory; the `<<gallery>>` directive scans for images in the source tree.
 - **Incremental builds**: Files are only rebuilt when source is newer than target. Template/config changes trigger full rebuilds. `--force` bypasses timestamp checks.
 - **Metadata caching**: Image metadata reads are cached per-path via a `meta_cache` dict passed through the build pipeline, avoiding redundant pyexiv2 calls.
+- **Theme static assets**: Files in `.theme/static/` are copied to the target root, preserving relative paths (e.g., `.theme/static/css/styles.css` → `target/css/styles.css`). They participate in incremental builds and are registered in `expected` so `sync_target` preserves them.
 - **Strict fail-fast**: Any error stops the build immediately via `GalleryError`.
 
 ### Dependencies

@@ -725,6 +725,118 @@ class TestAutoIndex:
         assert (target / "photos" / "index.html").exists()
 
 
+class TestThemeAssets:
+    def test_copies_theme_static_files(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source)
+
+        static_dir = source / ".theme" / "static"
+        static_dir.mkdir()
+        (static_dir / "styles.css").write_text("body { color: red; }")
+
+        tree = _make_tree()
+        build(tree, _site_config(), source, target)
+
+        assert (target / "styles.css").read_text() == "body { color: red; }"
+
+    def test_preserves_nested_directory_structure(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source)
+
+        css_dir = source / ".theme" / "static" / "css"
+        css_dir.mkdir(parents=True)
+        (css_dir / "main.css").write_text("h1 {}")
+        js_dir = source / ".theme" / "static" / "js"
+        js_dir.mkdir(parents=True)
+        (js_dir / "app.js").write_text("alert(1)")
+
+        tree = _make_tree()
+        build(tree, _site_config(), source, target)
+
+        assert (target / "css" / "main.css").read_text() == "h1 {}"
+        assert (target / "js" / "app.js").read_text() == "alert(1)"
+
+    def test_theme_assets_survive_sync(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source)
+
+        static_dir = source / ".theme" / "static"
+        static_dir.mkdir()
+        (static_dir / "styles.css").write_text("body {}")
+
+        tree = _make_tree()
+        expected = build(tree, _site_config(), source, target)
+        sync_target(target, expected)
+
+        assert (target / "styles.css").exists()
+
+    def test_no_error_without_static_dir(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source)
+
+        tree = _make_tree()
+        build(tree, _site_config(), source, target)  # should not raise
+
+    def test_skips_dotfiles(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source)
+
+        static_dir = source / ".theme" / "static"
+        static_dir.mkdir()
+        (static_dir / ".DS_Store").write_bytes(b"\x00")
+        dotdir = static_dir / ".hidden"
+        dotdir.mkdir()
+        (dotdir / "secret.txt").write_text("nope")
+        (static_dir / "visible.css").write_text("body {}")
+
+        tree = _make_tree()
+        build(tree, _site_config(), source, target)
+
+        assert (target / "visible.css").exists()
+        assert not (target / ".DS_Store").exists()
+        assert not (target / ".hidden").exists()
+
+    def test_incremental_skips_unchanged_theme_assets(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source)
+        conf = source / "site.conf"
+        conf.write_text("title: Test\n")
+
+        static_dir = source / ".theme" / "static"
+        static_dir.mkdir()
+        (static_dir / "styles.css").write_text("body {}")
+        _set_mtime(static_dir / "styles.css", PAST)
+        _set_theme_mtime(source, PAST)
+        _set_mtime(conf, PAST)
+
+        tree = _make_tree()
+        build(tree, _site_config(), source, target, config_path=conf)
+
+        out = target / "styles.css"
+        _set_mtime(out, PAST + 500)
+
+        build(tree, _site_config(), source, target, config_path=conf)
+        assert out.stat().st_mtime == PAST + 500  # not rewritten
+
+
 MOCK_METADATA = {
     "exif": {"ISO": "400", "FocalLength": "200mm"},
     "iptc": {"ObjectName": "Sunset Over Water", "City": "Portland"},

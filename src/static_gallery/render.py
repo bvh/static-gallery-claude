@@ -161,6 +161,15 @@ def build_image(
             raise GalleryError(f"Cannot copy {node.source} to {asset_target}: {exc}")
 
 
+def build_static_file(source: Path, target: Path) -> None:
+    """Copy a file to target. Like build_static but without Node or image stripping."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.copy2(source, target)
+    except OSError as exc:
+        raise GalleryError(f"Cannot copy {source} to {target}: {exc}")
+
+
 def build_static(node: Node, asset_target: Path) -> None:
     asset_target.parent.mkdir(parents=True, exist_ok=True)
     try:

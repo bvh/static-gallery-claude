@@ -14,6 +14,7 @@ from static_gallery.render import (
     build_listing,
     build_markdown,
     build_static,
+    build_static_file,
     try_load_template,
 )
 from static_gallery.shortcodes import shortcode_dependencies
@@ -65,8 +66,25 @@ def build(
         listing_template=try_load_template(env, "listing"),
     )
 
+    _copy_theme_assets(ctx, theme_dir)
     _build_node(tree, ctx)
     return ctx.expected
+
+
+def _copy_theme_assets(ctx: BuildContext, theme_dir: Path) -> None:
+    static_dir = theme_dir / "static"
+    if not static_dir.is_dir():
+        return
+    for source_file in static_dir.rglob("*"):
+        if not source_file.is_file():
+            continue
+        rel = source_file.relative_to(static_dir)
+        if any(part.startswith(".") for part in rel.parts):
+            continue
+        target_file = ctx.target / rel
+        ctx.expected.add(target_file)
+        if not is_up_to_date(target_file, source_file, ctx.global_mtime, is_html=False):
+            build_static_file(source_file, target_file)
 
 
 def _build_node(node: Node, ctx: BuildContext) -> None:
