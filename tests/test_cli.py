@@ -8,22 +8,15 @@ import pytest
 from static_gallery import _resolve_dirs
 from static_gallery.errors import GalleryError
 
+from conftest import setup_theme
+
 
 def _make_site(root):
     """Create a minimal valid site for integration testing."""
     (root / "site.conf").write_text(
         "title: Test Site\nurl: https://example.com/\nlanguage: en-us\n"
     )
-    theme = root / ".theme"
-    theme.mkdir()
-    (theme / "page.html").write_text(
-        "<html><head><title>{{ page.title }}</title></head>"
-        "<body>{{ content }}</body></html>"
-    )
-    (theme / "image.html").write_text(
-        "<html><head><title>{{ page.title }}</title></head>"
-        '<body><img src="{{ content }}"></body></html>'
-    )
+    setup_theme(root)
 
 
 class TestCLIIntegration:
@@ -204,7 +197,7 @@ class TestCLIIntegration:
         os.utime(html, (past, past))
         os.utime(source / "index.md", (past, past))
         os.utime(source / "site.conf", (past, past))
-        for f in (source / ".theme").iterdir():
+        for f in (source / ".theme").rglob("*"):
             os.utime(f, (past, past))
 
         # Rebuild without --force: should skip (mtime unchanged)

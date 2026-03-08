@@ -32,7 +32,3 @@ Template loading, markdown rendering, image processing, static copying, listing 
 
 ## Testing
 
-### Test templates are duplicated
-
-The test templates are duplicated across `test_builder.py` and `test_cli.py`. A shared `conftest.py` fixture for creating a minimal site would reduce that.
-
