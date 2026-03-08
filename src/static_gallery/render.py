@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,8 @@ from static_gallery.metadata import (
 from static_gallery.shortcodes import expand_shortcodes
 from static_gallery.errors import GalleryError
 from static_gallery.model import IMAGE_EXTENSIONS, Node, NodeType
+
+GENERATOR = {"name": "Static Gallery", "version": _pkg_version("static-gallery")}
 
 
 def load_template(env: jinja2.Environment, name: str) -> jinja2.Template:
@@ -87,7 +90,10 @@ def build_listing(
         title = site_config.get("title", "")
 
     output = listing_template.render(
-        site=site_config, page={"title": title}, children=children_data
+        site=site_config,
+        page={"title": title},
+        children=children_data,
+        generator=GENERATOR,
     )
 
     html_target.parent.mkdir(parents=True, exist_ok=True)
@@ -115,7 +121,10 @@ def build_markdown(
     template = load_template(env, template_type)
 
     output = template.render(
-        site=site_config, page=page_context, content=Markup(html_content)
+        site=site_config,
+        page=page_context,
+        content=Markup(html_content),
+        generator=GENERATOR,
     )
 
     html_target.parent.mkdir(parents=True, exist_ok=True)
@@ -145,7 +154,12 @@ def build_image(
         metadata = {"title": title, "src": filename, **image_meta}
         template = load_template(env, "image")
 
-        output = template.render(site=site_config, page=metadata, content=filename)
+        output = template.render(
+            site=site_config,
+            page=metadata,
+            content=filename,
+            generator=GENERATOR,
+        )
 
         html_target.parent.mkdir(parents=True, exist_ok=True)
         try:

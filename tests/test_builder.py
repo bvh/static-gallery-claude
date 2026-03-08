@@ -75,6 +75,28 @@ class TestBuildMarkdown:
         assert "page=Jane" in output
         assert "content=" in output
 
+    def test_generator_variable(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        tpl = "{{ generator.name }} {{ generator.version }}"
+        _setup_theme(source, page=tpl)
+
+        md_file = source / "test.md"
+        md_file.write_text("\nHello.")
+
+        tree = _make_tree(
+            _make_child(NodeType.MARKDOWN, "test", md_file),
+        )
+        build(tree, _site_config(), source, target)
+
+        output = (target / "test.html").read_text()
+        assert output.startswith("Static Gallery ")
+        # Version should be a dotted number like 0.1.0
+        version = output.split(" ", 2)[2].strip()
+        assert version.count(".") >= 1
+
     def test_type_override(self, tmp_path):
         source = tmp_path / "source"
         target = tmp_path / "target"
