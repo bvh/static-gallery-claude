@@ -36,6 +36,3 @@ Template loading, markdown rendering, image processing, static copying, listing 
 
 The test templates are duplicated across `test_builder.py` and `test_cli.py`. A shared `conftest.py` fixture for creating a minimal site would reduce that.
 
-### No tests for edge cases in `_sync_target` with symlinks or special files
-
-`_sync_target` uses `rglob("*")` and checks `is_file()` / `is_dir()`, but doesn't account for symlinks, sockets, or other non-regular files that might exist in the target. Unlikely in practice but worth a defensive check or test.
