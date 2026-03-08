@@ -133,6 +133,8 @@ The following variables are available within templates:
   metadata (image files)
 * **content** — the rendered HTML body (for markdown files) or the image
   path (for image files)
+* **generator** — a dict with `name` and `version` keys identifying the
+  generator (e.g., `{"name": "Static Gallery", "version": "0.9.0"}`)
 
 ## Image Metadata
 
@@ -240,6 +242,7 @@ The listing template receives:
   * **pages** — `[{"name", "title", "url"}, ...]`
   * **images** — `[{"filename", "stem", "title", "alt", "url", "src",
     "exif", "iptc", "xmp"}, ...]`
+* **generator** — generator name and version (same as in page templates)
 
 ## Incremental Builds
 

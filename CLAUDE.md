@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Static Gallery is a static site generator in Python with first-class image/gallery support. It uses Markdown (CommonMark) for content and Jinja templates for output. Early stage (0.1.0) — the README contains the full design spec.
+Static Gallery is a static site generator in Python with first-class image/gallery support. It uses Markdown (CommonMark) for content and Jinja templates for output. The README contains the full design spec.
 
 ## Commands
 
