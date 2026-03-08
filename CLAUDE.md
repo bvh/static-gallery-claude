@@ -8,7 +8,7 @@ Static Gallery is a static site generator in Python with first-class image/galle
 
 ## Commands
 
-- **Run**: `uv run gallery` (CLI flags: `--source`, `--target`, `--config`, `--theme`, `--force`)
+- **Run**: `uv run gallery` (CLI flags: `--source`, `--target`, `--config`, `--theme`, `--force`, `--stage`, `--port`)
 - **Run tests**: `uv run pytest`
 - **Run a single test**: `uv run pytest tests/test_scanner.py::test_name` or `uv run pytest -k "keyword"`
 - **Python 3.14**, managed with **uv**
@@ -19,7 +19,7 @@ Static Gallery is a static site generator in Python with first-class image/galle
 
 ### Modules
 
-- `__init__.py` — CLI entry point (`main`). Parses args, wires together config → scan → build.
+- `__init__.py` — CLI entry point (`main`). Parses args, wires together config → scan → build. With `--stage`, starts a local HTTP server after building.
 - `config.py` — Parses `site.conf` (key:value, split on first colon, case-insensitive keys, `#` comments) and markdown front matter (same format, no comments, terminated by blank line). Shared `_parse_line` helper.
 - `scanner.py` — `scan()` walks the source tree with `os.walk`, classifies files by extension, and returns a `Node` tree. Skips dotfiles/dotdirs and the config file.
 - `builder.py` — `build()` orchestrates the build: walks the `Node` tree, delegates rendering/copying to submodules, and returns the set of expected target paths. Contains `BuildContext` dataclass shared across the pipeline.

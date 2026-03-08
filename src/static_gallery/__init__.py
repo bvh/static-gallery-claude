@@ -46,6 +46,18 @@ def main() -> None:
         default=False,
         help="force full rebuild, ignoring file timestamps",
     )
+    parser.add_argument(
+        "--stage",
+        action="store_true",
+        default=False,
+        help="build and serve the site locally via HTTP",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="port for the staging server (default: 8000)",
+    )
 
     args = parser.parse_args()
 
@@ -70,6 +82,24 @@ def main() -> None:
     except GalleryError as exc:
         print(exc, file=sys.stderr)
         sys.exit(1)
+
+    if args.stage:
+        from functools import partial
+        from http.server import HTTPServer, SimpleHTTPRequestHandler
+
+        handler = partial(SimpleHTTPRequestHandler, directory=str(target))
+        try:
+            server = HTTPServer(("127.0.0.1", args.port), handler)
+        except OSError as exc:
+            print(f"Could not start server: {exc}", file=sys.stderr)
+            sys.exit(1)
+        print(f"Serving at http://localhost:{args.port} — press Ctrl+C to stop")
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            server.server_close()
 
 
 def _resolve_dirs(

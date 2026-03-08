@@ -40,6 +40,12 @@ directory)
 `--force`: force a full rebuild, ignoring file timestamps (by default, only
 files newer than their target are rebuilt)
 
+`--stage`: build the site and serve it locally via a built-in HTTP server.
+The server runs until stopped with Ctrl+C.
+
+`--port`: set the port for the staging server (default is `8000`). Only
+meaningful with `--stage`.
+
 ## Configuration
 
 The root of the site source directory **must** contain a `site.conf` file.

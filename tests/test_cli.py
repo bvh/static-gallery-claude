@@ -2,10 +2,11 @@ import argparse
 import os
 import subprocess
 import sys
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from static_gallery import _resolve_dirs
+from static_gallery import _resolve_dirs, main
 from static_gallery.errors import GalleryError
 
 from conftest import setup_theme
@@ -225,6 +226,45 @@ class TestCLIIntegration:
         assert html.stat().st_mtime > past
 
 
+class TestStage:
+    def test_stage_starts_server(self, tmp_path):
+        source = tmp_path / "site"
+        source.mkdir()
+        _make_site(source)
+        (source / "index.md").write_text("Title: Home\n\nHi.")
+
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "gallery",
+                    "--source",
+                    str(source),
+                    "--stage",
+                    "--port",
+                    "9123",
+                ],
+            ),
+            patch("http.server.HTTPServer") as mock_server_cls,
+        ):
+            mock_server = MagicMock()
+            mock_server.serve_forever.side_effect = KeyboardInterrupt
+            mock_server_cls.return_value = mock_server
+
+            main()
+
+            mock_server_cls.assert_called_once()
+            addr, handler_cls = mock_server_cls.call_args[0]
+            assert addr == ("127.0.0.1", 9123)
+
+            # Verify handler is configured with the target directory
+            target = (source / ".public").resolve()
+            assert handler_cls.keywords["directory"] == str(target)
+
+            mock_server.serve_forever.assert_called_once()
+            mock_server.server_close.assert_called_once()
+
+
 def _make_args(**kwargs):
     """Create an argparse.Namespace with default None values."""
     defaults = {
@@ -233,6 +273,8 @@ def _make_args(**kwargs):
         "config": None,
         "theme": None,
         "force": False,
+        "stage": False,
+        "port": 8000,
     }
     defaults.update(kwargs)
     return argparse.Namespace(**defaults)
