@@ -2,7 +2,7 @@ import os
 from unittest.mock import patch
 
 import pytest
-from static_gallery.builder import build
+from static_gallery.builder import build, _sync_target
 from static_gallery.errors import GalleryError
 from static_gallery.model import Node, NodeType
 
@@ -856,3 +856,27 @@ class TestImageMetadata:
 
         html = (target / "my-cool_photo.html").read_text()
         assert "<title>My Cool Photo</title>" in html
+
+
+class TestSyncTargetSymlinks:
+    def test_symlink_in_target_is_cleaned_up(self, tmp_path):
+        target = tmp_path / "target"
+        target.mkdir()
+        real_file = tmp_path / "real.txt"
+        real_file.write_text("hello")
+        link = target / "stale.txt"
+        link.symlink_to(real_file)
+
+        _sync_target(target, set())
+
+        assert not link.exists() and not link.is_symlink()
+
+    def test_broken_symlink_in_target_is_cleaned_up(self, tmp_path):
+        target = tmp_path / "target"
+        target.mkdir()
+        link = target / "broken.txt"
+        link.symlink_to(tmp_path / "nonexistent")
+
+        _sync_target(target, set())
+
+        assert not link.is_symlink()

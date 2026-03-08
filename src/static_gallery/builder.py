@@ -369,7 +369,7 @@ def _sync_target(target: Path, expected_paths: set[Path]) -> None:
         return
 
     for path in sorted(target.rglob("*"), reverse=True):
-        if path.is_file() and path not in expected_paths:
-            path.unlink()
-        elif path.is_dir() and not any(path.iterdir()):
+        if path.is_dir() and not any(path.iterdir()):
             path.rmdir()
+        elif not path.is_dir() and path not in expected_paths:
+            path.unlink()
