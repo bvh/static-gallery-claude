@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import shutil
 from importlib.metadata import version as _pkg_version
 from pathlib import Path
@@ -14,12 +15,33 @@ from static_gallery.metadata import (
     copy_image_stripped,
     get_image_metadata,
     resolve_alt,
+    resolve_date_iso,
     resolve_title,
     stem_to_title,
 )
 from static_gallery.shortcodes import expand_shortcodes
 from static_gallery.errors import GalleryError
 from static_gallery.model import IMAGE_EXTENSIONS, Node, NodeType
+from static_gallery.paths import node_segments
+
+_ISO_FORMATS = [
+    "%Y-%m-%dT%H:%M:%SZ",
+    "%Y-%m-%dT%H:%M:%S",
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%d",
+]
+
+
+def _normalize_date_iso(value: str) -> str | None:
+    """Parse a date string in common formats and return ISO 8601, or None."""
+    for fmt in _ISO_FORMATS:
+        try:
+            dt = datetime.datetime.strptime(value, fmt)
+            return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        except ValueError:
+            continue
+    return None
+
 
 GENERATOR = {"name": "Static Gallery", "version": _pkg_version("static-gallery")}
 
@@ -40,22 +62,28 @@ def _breadcrumbs(node: Node, site_config: dict[str, str]) -> list[dict[str, str]
     return crumbs
 
 
-def load_template(env: jinja2.Environment, name: str) -> jinja2.Template:
+def load_template(
+    env: jinja2.Environment, name: str, ext: str = "html"
+) -> jinja2.Template:
+    filename = f"{name}.{ext}"
     try:
-        return env.get_template(f"{name}.html")
+        return env.get_template(filename)
     except jinja2.TemplateNotFound:
-        raise GalleryError(f"Missing template: .theme/{name}.html")
+        raise GalleryError(f"Missing template: .theme/{filename}")
     except jinja2.TemplateSyntaxError as exc:
-        raise GalleryError(f"Template syntax error in .theme/{name}.html: {exc}")
+        raise GalleryError(f"Template syntax error in .theme/{filename}: {exc}")
 
 
-def try_load_template(env: jinja2.Environment, name: str) -> jinja2.Template | None:
+def try_load_template(
+    env: jinja2.Environment, name: str, ext: str = "html"
+) -> jinja2.Template | None:
+    filename = f"{name}.{ext}"
     try:
-        return env.get_template(f"{name}.html")
+        return env.get_template(filename)
     except jinja2.TemplateNotFound:
         return None
     except jinja2.TemplateSyntaxError as exc:
-        raise GalleryError(f"Template syntax error in .theme/{name}.html: {exc}")
+        raise GalleryError(f"Template syntax error in .theme/{filename}: {exc}")
 
 
 def _collect_children_data(
@@ -248,3 +276,103 @@ def build_static(node: Node, asset_target: Path) -> None:
             shutil.copy2(node.source, asset_target)
     except OSError as exc:
         raise GalleryError(f"Cannot copy {node.source} to {asset_target}: {exc}")
+
+
+def _collect_feed_items(
+    node: Node,
+    site_url: str,
+    meta_cache: dict[Path, dict[str, dict]],
+) -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
+    _collect_feed_items_recursive(node, site_url, meta_cache, items)
+    return items
+
+
+def _node_url(node: Node, site_url: str) -> str:
+    """Build the absolute URL for a content node."""
+    segs = node_segments(node)
+    if node.is_index:
+        rel = "/".join(segs) + "/" if segs else ""
+    else:
+        parent = segs[:-1]
+        rel = "/".join(parent + [node.name + ".html"])
+    return site_url + rel
+
+
+def _collect_feed_items_recursive(
+    node: Node,
+    site_url: str,
+    meta_cache: dict[Path, dict[str, dict]],
+    items: list[dict[str, str]],
+) -> None:
+    if node.source is not None and node.node_type == NodeType.MARKDOWN:
+        try:
+            text = node.source.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise GalleryError(f"Cannot read {node.source}: {exc}")
+        fm, _ = parse_front_matter(text)
+        raw_date = fm.get("date")
+        if raw_date:
+            date = _normalize_date_iso(raw_date)
+            if date:
+                items.append(
+                    {
+                        "title": fm.get("title", stem_to_title(node.name)),
+                        "url": _node_url(node, site_url),
+                        "date": date,
+                        "description": fm.get("description", ""),
+                        "type": "page",
+                    }
+                )
+    elif node.node_type == NodeType.IMAGE and node.source is not None:
+        image_meta = get_image_metadata(node.source, meta_cache)
+        date = resolve_date_iso(image_meta)
+        if date:
+            items.append(
+                {
+                    "title": resolve_title(node.source.stem, image_meta),
+                    "url": _node_url(node, site_url),
+                    "date": date,
+                    "description": "",
+                    "type": "image",
+                }
+            )
+
+    for child in node.children:
+        _collect_feed_items_recursive(child, site_url, meta_cache, items)
+
+
+def build_feed(
+    tree: Node,
+    site_config: dict[str, str],
+    feed_template: jinja2.Template,
+    meta_cache: dict[Path, dict[str, dict]],
+    target: Path,
+) -> None:
+    site_url = site_config.get("url", "")
+    if site_url and not site_url.endswith("/"):
+        site_url += "/"
+
+    items = _collect_feed_items(tree, site_url, meta_cache)
+    items.sort(key=lambda x: x["date"], reverse=True)
+
+    try:
+        limit = int(site_config.get("feed_limit", "20"))
+    except ValueError:
+        raise GalleryError(
+            f"Invalid feed_limit value: {site_config['feed_limit']!r} (must be an integer)"
+        )
+    items = items[:limit]
+
+    output = feed_template.render(
+        site=site_config,
+        items=items,
+        generator=GENERATOR,
+    )
+
+    feed_path = target / "feed.xml"
+    feed_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        feed_path.write_text(output, encoding="utf-8")
+    except OSError as exc:
+        raise GalleryError(f"Cannot write {feed_path}: {exc}")

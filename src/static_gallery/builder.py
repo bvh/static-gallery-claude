@@ -11,6 +11,7 @@ from static_gallery.freshness import compute_global_mtime, is_up_to_date
 from static_gallery.model import Node, NodeType
 from static_gallery.paths import node_segments, target_paths
 from static_gallery.render import (
+    build_feed,
     build_image,
     build_listing,
     build_markdown,
@@ -52,7 +53,10 @@ def build(
     try:
         env = jinja2.Environment(
             loader=jinja2.FileSystemLoader(str(theme_dir)),
-            autoescape=True,
+            autoescape=jinja2.select_autoescape(
+                enabled_extensions=("html",),
+                default_for_string=True,
+            ),
         )
     except Exception as exc:
         raise GalleryError(f"Cannot load templates from {theme_dir}: {exc}")
@@ -75,6 +79,17 @@ def build(
 
     _copy_theme_assets(ctx, theme_dir)
     _build_node(tree, ctx)
+
+    feed_template = try_load_template(env, "feed", ext="xml")
+    if feed_template is not None:
+        feed_path = target / "feed.xml"
+        ctx.expected.add(feed_path)
+        if ctx.verbose:
+            prefix = "Would build" if ctx.dry_run else "Build"
+            print(f"{prefix}: {feed_path}", file=sys.stderr)
+        if not ctx.dry_run:
+            build_feed(tree, site_config, feed_template, ctx.meta_cache, target)
+
     return ctx.expected
 
 

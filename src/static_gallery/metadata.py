@@ -72,15 +72,31 @@ def read_image_metadata(path: Path) -> dict[str, dict]:
     return result
 
 
-def resolve_date(path: Path, metadata: dict[str, dict]) -> float:
-    """EXIF DateTimeOriginal if available, else filesystem mtime."""
+def _parse_exif_datetime(metadata: dict[str, dict]) -> datetime.datetime | None:
+    """Parse EXIF DateTimeOriginal into a datetime, or None if unavailable."""
     dto = metadata.get("exif", {}).get("DateTimeOriginal")
     if dto and isinstance(dto, str):
         try:
-            return datetime.datetime.strptime(dto, "%Y:%m:%d %H:%M:%S").timestamp()
+            return datetime.datetime.strptime(dto, "%Y:%m:%d %H:%M:%S")
         except ValueError:
             pass
+    return None
+
+
+def resolve_date(path: Path, metadata: dict[str, dict]) -> float:
+    """EXIF DateTimeOriginal if available, else filesystem mtime."""
+    dt = _parse_exif_datetime(metadata)
+    if dt is not None:
+        return dt.timestamp()
     return os.path.getmtime(path)
+
+
+def resolve_date_iso(metadata: dict[str, dict]) -> str | None:
+    """EXIF DateTimeOriginal as ISO 8601 string, or None if unavailable."""
+    dt = _parse_exif_datetime(metadata)
+    if dt is not None:
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return None
 
 
 def resolve_title(stem: str, metadata: dict[str, dict]) -> str:
