@@ -6,10 +6,6 @@
 
 ## Design
 
-### `parse_front_matter` unpacking is fragile
-
-Line 59 in `config.py` does `key, value = _parse_line(...)` without guarding against a `None` return. It works only because the blank-line check on line 56 fires first. If `_parse_line` ever gains another `None`-return path (or if the iteration order changes), this will raise `TypeError`. Safer to check explicitly.
-
 ### Builder re-derives index.md status
 
 `_target_paths` in `builder.py` checks `node.source.name.lower() == "index.md"` to determine path layout, but the scanner already knows this during index.md collapsing. A boolean field on `Node` (e.g. `is_index`) would remove that coupling and make the intent clearer.

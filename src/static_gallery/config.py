@@ -56,7 +56,11 @@ def parse_front_matter(text: str) -> tuple[dict[str, str], str]:
         if line.strip() == "":
             body_start = i + 1
             break
-        key, value = _parse_line(line, allow_comments=False)
+        result = _parse_line(line, allow_comments=False)
+        if result is None:
+            body_start = i + 1
+            break
+        key, value = result
         meta[key] = value
 
     body = "\n".join(lines[body_start:])
