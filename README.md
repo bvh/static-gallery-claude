@@ -34,6 +34,9 @@ directory)
 `--config`: sets the root configuration file (default is `site.conf` in the
 root of the source directory)
 
+`--theme`: sets the theme directory (default is `.theme` inside the source
+directory)
+
 `--force`: force a full rebuild, ignoring file timestamps (by default, only
 files newer than their target are rebuilt)
 
