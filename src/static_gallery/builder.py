@@ -8,6 +8,7 @@ import jinja2
 
 from static_gallery.errors import GalleryError
 from static_gallery.freshness import compute_global_mtime, is_up_to_date
+from static_gallery.metadata import ImageMetadata
 from static_gallery.model import Node, NodeType
 from static_gallery.paths import node_segments, target_paths
 from static_gallery.render import (
@@ -29,7 +30,7 @@ class BuildContext:
     source: Path
     target: Path
     global_mtime: float
-    meta_cache: dict[Path, dict[str, dict]] = field(default_factory=dict)
+    meta_cache: dict[Path, ImageMetadata] = field(default_factory=dict)
     expected: set[Path] = field(default_factory=set)
     listing_template: jinja2.Template | None = None
     verbose: bool = False

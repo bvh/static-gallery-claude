@@ -12,6 +12,7 @@ import mistletoe
 
 from static_gallery.config import parse_front_matter
 from static_gallery.metadata import (
+    ImageMetadata,
     copy_image_stripped,
     get_image_metadata,
     resolve_alt,
@@ -87,7 +88,7 @@ def try_load_template(
 
 
 def _collect_children_data(
-    node: Node, meta_cache: dict[Path, dict[str, dict]]
+    node: Node, meta_cache: dict[Path, ImageMetadata]
 ) -> dict[str, list[dict[str, Any]]]:
     directories: list[dict[str, Any]] = []
     pages: list[dict[str, Any]] = []
@@ -129,7 +130,7 @@ def _collect_children_data(
 
 
 def _image_siblings(
-    node: Node, meta_cache: dict[Path, dict[str, dict]]
+    node: Node, meta_cache: dict[Path, ImageMetadata]
 ) -> tuple[dict[str, str] | None, dict[str, str] | None]:
     if node.parent is None:
         return None, None
@@ -158,7 +159,7 @@ def build_listing(
     html_target: Path,
     site_config: dict[str, str],
     listing_template: jinja2.Template,
-    meta_cache: dict[Path, dict[str, dict]],
+    meta_cache: dict[Path, ImageMetadata],
 ) -> None:
     children_data = _collect_children_data(node, meta_cache)
     if node.name:
@@ -186,7 +187,7 @@ def build_markdown(
     html_target: Path,
     site_config: dict[str, str],
     env: jinja2.Environment,
-    meta_cache: dict[Path, dict[str, dict]],
+    meta_cache: dict[Path, ImageMetadata],
     source_root: Path,
     text: str,
 ) -> None:
@@ -219,7 +220,7 @@ def build_image(
     asset_target: Path,
     site_config: dict[str, str],
     env: jinja2.Environment,
-    meta_cache: dict[Path, dict[str, dict]],
+    meta_cache: dict[Path, ImageMetadata],
     *,
     skip_html: bool = False,
     skip_asset: bool = False,
@@ -281,7 +282,7 @@ def build_static(node: Node, asset_target: Path) -> None:
 def _collect_feed_items(
     node: Node,
     site_url: str,
-    meta_cache: dict[Path, dict[str, dict]],
+    meta_cache: dict[Path, ImageMetadata],
 ) -> list[dict[str, str]]:
     items: list[dict[str, str]] = []
     _collect_feed_items_recursive(node, site_url, meta_cache, items)
@@ -302,7 +303,7 @@ def _node_url(node: Node, site_url: str) -> str:
 def _collect_feed_items_recursive(
     node: Node,
     site_url: str,
-    meta_cache: dict[Path, dict[str, dict]],
+    meta_cache: dict[Path, ImageMetadata],
     items: list[dict[str, str]],
 ) -> None:
     if node.source is not None and node.node_type == NodeType.MARKDOWN:
@@ -346,7 +347,7 @@ def build_feed(
     tree: Node,
     site_config: dict[str, str],
     feed_template: jinja2.Template,
-    meta_cache: dict[Path, dict[str, dict]],
+    meta_cache: dict[Path, ImageMetadata],
     target: Path,
 ) -> None:
     site_url = site_config.get("url", "")

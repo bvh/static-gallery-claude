@@ -9,6 +9,7 @@ import jinja2
 
 from static_gallery.errors import GalleryError
 from static_gallery.metadata import (
+    ImageMetadata,
     get_image_metadata,
     resolve_alt,
     resolve_date,
@@ -146,7 +147,7 @@ def _expand_gallery(
     *,
     env: jinja2.Environment,
     source_dir: Path,
-    meta_cache: dict[Path, dict[str, dict]],
+    meta_cache: dict[Path, ImageMetadata],
     resolved_root: Path | None = None,
 ) -> str:
     opts = _parse_options(raw_opts)
@@ -247,7 +248,7 @@ def expand_shortcodes(
     body: str,
     env: jinja2.Environment,
     source_dir: Path,
-    meta_cache: dict[Path, dict[str, dict]] | None = None,
+    meta_cache: dict[Path, ImageMetadata] | None = None,
     source_root: Path | None = None,
 ) -> str:
     if meta_cache is None:

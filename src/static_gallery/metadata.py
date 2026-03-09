@@ -39,22 +39,30 @@ def stem_to_alt(stem: str) -> str:
     return stem.replace("-", " ").replace("_", " ")
 
 
-def get_image_metadata(
-    path: Path, cache: dict[Path, dict[str, dict]]
-) -> dict[str, dict]:
+ImageMetadata = dict[str, dict | int | None]
+
+
+def get_image_metadata(path: Path, cache: dict[Path, ImageMetadata]) -> ImageMetadata:
     """Cached wrapper around read_image_metadata."""
     if path not in cache:
         cache[path] = read_image_metadata(path)
     return cache[path]
 
 
-def read_image_metadata(path: Path) -> dict[str, dict]:
+def read_image_metadata(path: Path) -> ImageMetadata:
     """Read EXIF, IPTC, and XMP metadata from an image file.
 
-    Returns {"exif": {...}, "iptc": {...}, "xmp": {...}} with shortened keys.
-    On failure, returns empty dicts — metadata is supplemental.
+    Returns {"exif": {...}, "iptc": {...}, "xmp": {...}, "width": int|None,
+    "height": int|None} with shortened keys. On failure, returns empty dicts
+    and None dimensions — metadata is supplemental.
     """
-    result: dict[str, dict] = {"exif": {}, "iptc": {}, "xmp": {}}
+    result: ImageMetadata = {
+        "exif": {},
+        "iptc": {},
+        "xmp": {},
+        "width": None,
+        "height": None,
+    }
     try:
         img = pyexiv2.Image(str(path))
         try:
@@ -65,6 +73,8 @@ def read_image_metadata(path: Path) -> dict[str, dict]:
             ]:
                 raw = reader()
                 result[category] = {_shorten_key(k): v for k, v in raw.items()}
+            result["width"] = img.get_pixel_width()
+            result["height"] = img.get_pixel_height()
         finally:
             img.close()
     except Exception as exc:
@@ -72,7 +82,7 @@ def read_image_metadata(path: Path) -> dict[str, dict]:
     return result
 
 
-def _parse_exif_datetime(metadata: dict[str, dict]) -> datetime.datetime | None:
+def _parse_exif_datetime(metadata: ImageMetadata) -> datetime.datetime | None:
     """Parse EXIF DateTimeOriginal into a datetime, or None if unavailable."""
     dto = metadata.get("exif", {}).get("DateTimeOriginal")
     if dto and isinstance(dto, str):
@@ -83,7 +93,7 @@ def _parse_exif_datetime(metadata: dict[str, dict]) -> datetime.datetime | None:
     return None
 
 
-def resolve_date(path: Path, metadata: dict[str, dict]) -> float:
+def resolve_date(path: Path, metadata: ImageMetadata) -> float:
     """EXIF DateTimeOriginal if available, else filesystem mtime."""
     dt = _parse_exif_datetime(metadata)
     if dt is not None:
@@ -91,7 +101,7 @@ def resolve_date(path: Path, metadata: dict[str, dict]) -> float:
     return os.path.getmtime(path)
 
 
-def resolve_date_iso(metadata: dict[str, dict]) -> str | None:
+def resolve_date_iso(metadata: ImageMetadata) -> str | None:
     """EXIF DateTimeOriginal as ISO 8601 string, or None if unavailable."""
     dt = _parse_exif_datetime(metadata)
     if dt is not None:
@@ -99,7 +109,7 @@ def resolve_date_iso(metadata: dict[str, dict]) -> str | None:
     return None
 
 
-def resolve_title(stem: str, metadata: dict[str, dict]) -> str:
+def resolve_title(stem: str, metadata: ImageMetadata) -> str:
     """Determine image title from metadata, falling back to filename stem."""
     iptc_title = metadata.get("iptc", {}).get("ObjectName")
     if iptc_title:
@@ -114,7 +124,7 @@ def resolve_title(stem: str, metadata: dict[str, dict]) -> str:
     return stem_to_title(stem)
 
 
-def resolve_alt(stem: str, metadata: dict[str, dict]) -> str:
+def resolve_alt(stem: str, metadata: ImageMetadata) -> str:
     """Determine alt text from metadata, falling back to filename stem."""
     xmp_alt = metadata.get("xmp", {}).get("AltTextAccessibility")
     if xmp_alt:

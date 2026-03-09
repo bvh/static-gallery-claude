@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 
 from static_gallery.metadata import (
     copy_image_stripped,
+    get_image_metadata,
     read_image_metadata,
     resolve_title,
     resolve_alt,
@@ -86,13 +87,25 @@ class TestReadImageMetadata:
     def test_returns_empty_on_failure(self, tmp_path):
         fake = tmp_path / "nonexistent.jpg"
         result = read_image_metadata(fake)
-        assert result == {"exif": {}, "iptc": {}, "xmp": {}}
+        assert result == {
+            "exif": {},
+            "iptc": {},
+            "xmp": {},
+            "width": None,
+            "height": None,
+        }
 
     def test_returns_empty_on_corrupt_file(self, tmp_path):
         corrupt = tmp_path / "bad.jpg"
         corrupt.write_bytes(b"not an image")
         result = read_image_metadata(corrupt)
-        assert result == {"exif": {}, "iptc": {}, "xmp": {}}
+        assert result == {
+            "exif": {},
+            "iptc": {},
+            "xmp": {},
+            "width": None,
+            "height": None,
+        }
 
     def test_reads_real_image(self):
         path = Path("BVH_0497-4x5.jpg")
@@ -102,6 +115,8 @@ class TestReadImageMetadata:
         assert result["iptc"]["ObjectName"] == "Space Needle at Night"
         assert "exif" in result
         assert "xmp" in result
+        assert isinstance(result["width"], int) and result["width"] > 0
+        assert isinstance(result["height"], int) and result["height"] > 0
 
     def test_keys_are_shortened(self):
         mock_img = MagicMock()
@@ -111,6 +126,8 @@ class TestReadImageMetadata:
             "Xmp.dc.title": "Title",
             "Xmp.crs.FilterList/crs:Filters[1]/crs:Name": "Enhance",
         }
+        mock_img.get_pixel_width.return_value = 1920
+        mock_img.get_pixel_height.return_value = 1080
 
         with patch("static_gallery.metadata.pyexiv2.Image", return_value=mock_img):
             result = read_image_metadata(Path("test.jpg"))
@@ -121,7 +138,28 @@ class TestReadImageMetadata:
             "title": "Title",
             "FilterList/crs:Filters[1]/crs:Name": "Enhance",
         }
+        assert result["width"] == 1920
+        assert result["height"] == 1080
         mock_img.close.assert_called_once()
+
+    def test_dimensions_flow_through_cache(self):
+        mock_img = MagicMock()
+        mock_img.read_exif.return_value = {}
+        mock_img.read_iptc.return_value = {}
+        mock_img.read_xmp.return_value = {}
+        mock_img.get_pixel_width.return_value = 800
+        mock_img.get_pixel_height.return_value = 600
+
+        cache = {}
+        path = Path("cached.jpg")
+        with patch("static_gallery.metadata.pyexiv2.Image", return_value=mock_img):
+            result = get_image_metadata(path, cache)
+
+        assert result["width"] == 800
+        assert result["height"] == 600
+        # Second call should use cache
+        result2 = get_image_metadata(path, cache)
+        assert result2 is result
 
     def test_warns_on_failure(self, tmp_path, capsys):
         bad = tmp_path / "bad.jpg"
