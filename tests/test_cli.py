@@ -104,16 +104,16 @@ class TestCLIIntegration:
 
         # Markdown → HTML
         assert (target / "index.html").exists()
-        assert (target / "about.html").exists()
+        assert (target / "about" / "index.html").exists()
         assert (target / "news" / "index.html").exists()
-        assert (target / "news" / "today.html").exists()
+        assert (target / "news" / "today" / "index.html").exists()
 
         # Image → HTML + copy (portrait has no collision)
-        assert (target / "portrait.html").exists()
-        assert (target / "portrait.jpg").exists()
+        assert (target / "portrait" / "index.html").exists()
+        assert (target / "portrait" / "portrait.jpg").exists()
 
         # Collision: today.md wins, today.jpg is static only
-        today_html = (target / "news" / "today.html").read_text()
+        today_html = (target / "news" / "today" / "index.html").read_text()
         assert "<title>Today</title>" in today_html  # from markdown, not image
         assert (target / "news" / "today.jpg").exists()  # copied as static
 
@@ -137,7 +137,7 @@ class TestCLIIntegration:
             capture_output=True,
             text=True,
         )
-        assert (target / "old.html").exists()
+        assert (target / "old" / "index.html").exists()
 
         # Remove source file and rebuild
         (source / "old.md").unlink()
@@ -146,7 +146,7 @@ class TestCLIIntegration:
             capture_output=True,
             text=True,
         )
-        assert not (target / "old.html").exists()
+        assert not (target / "old" / "index.html").exists()
         assert (target / "index.html").exists()
 
     def test_custom_config_path(self, tmp_path):

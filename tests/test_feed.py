@@ -85,7 +85,7 @@ class TestBuildFeed:
         assert feed.exists()
         content = feed.read_text()
         assert "<title>My Post</title>" in content
-        assert "https://example.com/post.html" in content
+        assert "https://example.com/post/" in content
         assert "2024-03-15T10:00:00Z" in content
 
     def test_excludes_undated_markdown(self, tmp_path):
@@ -181,7 +181,7 @@ class TestBuildFeed:
         content = (target / "feed.xml").read_text()
         assert "<title>Golden Sunset</title>" in content
         assert "2024-07-20T18:30:00Z" in content
-        assert "https://example.com/sunset.html" in content
+        assert "https://example.com/sunset/" in content
 
     def test_feed_excludes_image_without_exif_date(self, tmp_path):
         source = tmp_path / "source"
@@ -263,7 +263,7 @@ class TestBuildFeed:
         build(tree, _site_config(), source, target)
 
         content = (target / "feed.xml").read_text()
-        assert "https://example.com/blog/post.html" in content
+        assert "https://example.com/blog/post/" in content
 
     def test_date_only_format_normalized(self, tmp_path):
         """Date: 2024-03-15 should be normalized to full ISO 8601."""

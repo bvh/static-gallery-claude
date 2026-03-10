@@ -197,8 +197,8 @@ class TestGalleryShortcode:
         result = expand_shortcodes(
             "<<gallery>>", env, src, meta_cache=mc, source_root=src
         )
-        assert "alpha.jpg:alpha.html" in result
-        assert "beta.png:beta.html" in result
+        assert "alpha.jpg:alpha/" in result
+        assert "beta.png:beta/" in result
 
     def test_sort_name(self, env, src):
         mc = {}
@@ -208,10 +208,7 @@ class TestGalleryShortcode:
         result = expand_shortcodes(
             "<<gallery sort=name>>", env, src, meta_cache=mc, source_root=src
         )
-        assert (
-            result
-            == "apple.jpg:apple.html,banana.jpg:banana.html,cherry.jpg:cherry.html"
-        )
+        assert result == "apple.jpg:apple/,banana.jpg:banana/,cherry.jpg:cherry/"
 
     def test_sort_name_reverse(self, env, src):
         mc = {}
@@ -220,7 +217,7 @@ class TestGalleryShortcode:
         result = expand_shortcodes(
             "<<gallery sort=name reverse>>", env, src, meta_cache=mc, source_root=src
         )
-        assert result == "cherry.jpg:cherry.html,apple.jpg:apple.html"
+        assert result == "cherry.jpg:cherry/,apple.jpg:apple/"
 
     def test_sort_date(self, env, src):
         import os
@@ -234,7 +231,7 @@ class TestGalleryShortcode:
         result = expand_shortcodes(
             "<<gallery sort=date>>", env, src, meta_cache=mc, source_root=src
         )
-        assert result == "old.jpg:old.html,new.jpg:new.html"
+        assert result == "old.jpg:old/,new.jpg:new/"
 
     def test_sort_date_reverse(self, env, src):
         import os
@@ -248,7 +245,7 @@ class TestGalleryShortcode:
         result = expand_shortcodes(
             "<<gallery sort=date reverse>>", env, src, meta_cache=mc, source_root=src
         )
-        assert result == "new.jpg:new.html,old.jpg:old.html"
+        assert result == "new.jpg:new/,old.jpg:old/"
 
     def test_filter(self, env, src):
         mc = {}
@@ -257,7 +254,7 @@ class TestGalleryShortcode:
         result = expand_shortcodes(
             "<<gallery filter=*.jpg>>", env, src, meta_cache=mc, source_root=src
         )
-        assert "photo.jpg:photo.html" in result
+        assert "photo.jpg:photo/" in result
         assert "photo.png" not in result
 
     def test_path_subdirectory(self, env, src):
@@ -268,7 +265,7 @@ class TestGalleryShortcode:
         result = expand_shortcodes(
             "<<gallery path=photos>>", env, src, meta_cache=mc, source_root=src
         )
-        assert "sunset.jpg:sunset.html" in result
+        assert "sunset.jpg:sunset/" in result
 
     def test_path_relative_in_output(self, env, src):
         sub = src / "photos"
@@ -282,6 +279,18 @@ class TestGalleryShortcode:
             "<<gallery path=photos>>", env, src, meta_cache=mc, source_root=src
         )
         assert result == "photos/sunset.jpg"
+
+    def test_collision_falls_back_to_html(self, env, src):
+        mc = {}
+        _img(src, "sunset.jpg", mc)
+        # Create a sibling directory "sunset/" with contents
+        sibling = src / "sunset"
+        sibling.mkdir()
+        (sibling / "detail.txt").write_text("info")
+        result = expand_shortcodes(
+            "<<gallery>>", env, src, meta_cache=mc, source_root=src
+        )
+        assert "sunset.jpg:sunset.html" in result
 
     def test_empty_directory(self, env, src):
         result = expand_shortcodes(

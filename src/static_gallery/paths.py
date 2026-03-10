@@ -16,6 +16,22 @@ def node_segments(node: Node) -> list[str]:
     return parts
 
 
+def has_sibling_dir(node: Node) -> bool:
+    """Check if a sibling directory with the same name exists and has children.
+
+    Returns False for parentless nodes (e.g. the root), which always get
+    pretty URLs since there is no sibling to collide with.
+    """
+    if node.parent is None:
+        return False
+    for sibling in node.parent.children:
+        if sibling is node:
+            continue
+        if sibling.node_type is None and sibling.name == node.name and sibling.children:
+            return True
+    return False
+
+
 def target_paths(
     node: Node, target: Path, *, has_listing: bool = False
 ) -> tuple[Path | None, Path | None]:
@@ -30,13 +46,19 @@ def target_paths(
     if node.node_type == NodeType.MARKDOWN:
         if node.is_index:
             html = target / prefix / "index.html"
-        else:
+        elif has_sibling_dir(node):
             html = target / prefix.parent / (node.name + ".html")
+        else:
+            html = target / prefix / "index.html"
         return html, None
 
     elif node.node_type == NodeType.IMAGE:
-        html = target / prefix.parent / (node.name + ".html")
-        asset = target / prefix.parent / node.source.name
+        if has_sibling_dir(node):
+            html = target / prefix.parent / (node.name + ".html")
+            asset = target / prefix.parent / node.source.name
+        else:
+            html = target / prefix / "index.html"
+            asset = target / prefix / node.source.name
         return html, asset
 
     else:  # STATIC

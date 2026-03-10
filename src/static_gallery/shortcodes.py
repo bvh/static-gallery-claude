@@ -184,6 +184,11 @@ def _expand_gallery(
     for img in images:
         stem = img.stem
         image_meta = get_image_metadata(img, meta_cache)
+        sibling_dir = img.parent / stem
+        if sibling_dir.is_dir() and any(sibling_dir.iterdir()):
+            page_url = f"{stem}.html"
+        else:
+            page_url = f"{stem}/"
         items.append(
             {
                 "path": str(img.relative_to(source_dir)),
@@ -192,7 +197,7 @@ def _expand_gallery(
                 "extension": img.suffix.lower(),
                 "alt": resolve_alt(stem, image_meta),
                 "title": resolve_title(stem, image_meta),
-                "page_url": f"{stem}.html",
+                "page_url": page_url,
                 "exif": image_meta["exif"],
                 "iptc": image_meta["iptc"],
                 "xmp": image_meta["xmp"],

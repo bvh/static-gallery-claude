@@ -165,7 +165,7 @@ class TestExifDateSorting:
         result = expand_shortcodes(
             "<<gallery sort=date>>", env, src, meta_cache=mc, source_root=src
         )
-        assert result == "beta.jpg:beta.html,alpha.jpg:alpha.html"
+        assert result == "beta.jpg:beta/,alpha.jpg:alpha/"
 
     def test_gallery_sort_date_reverse_with_exif(self, env, src):
         mc = {}
@@ -184,7 +184,7 @@ class TestExifDateSorting:
         result = expand_shortcodes(
             "<<gallery sort=date reverse>>", env, src, meta_cache=mc, source_root=src
         )
-        assert result == "alpha.jpg:alpha.html,beta.jpg:beta.html"
+        assert result == "alpha.jpg:alpha/,beta.jpg:beta/"
 
 
 # ===========================================================================
@@ -310,7 +310,7 @@ class TestBreadcrumbs:
 
         build(tree, _site_config(), source, target)
 
-        content = (target / "blog" / "post.html").read_text()
+        content = (target / "blog" / "post" / "index.html").read_text()
         assert "Test Site:/" in content
         assert "blog:/blog/" in content
 
@@ -340,8 +340,8 @@ class TestPrevNextNavigation:
         prev, nxt = _image_siblings(children[1], mc)
         assert prev is not None
         assert nxt is not None
-        assert prev["url"] == "a.html"
-        assert nxt["url"] == "c.html"
+        assert prev["url"] == "a/"
+        assert nxt["url"] == "c/"
 
     def test_first_gets_only_next(self, tmp_path):
         parent, children = self._make_image_gallery(tmp_path, "a.jpg", "b.jpg", "c.jpg")
@@ -349,14 +349,14 @@ class TestPrevNextNavigation:
         prev, nxt = _image_siblings(children[0], mc)
         assert prev is None
         assert nxt is not None
-        assert nxt["url"] == "b.html"
+        assert nxt["url"] == "b/"
 
     def test_last_gets_only_prev(self, tmp_path):
         parent, children = self._make_image_gallery(tmp_path, "a.jpg", "b.jpg", "c.jpg")
         mc = {c.source: _EMPTY_META for c in children}
         prev, nxt = _image_siblings(children[2], mc)
         assert prev is not None
-        assert prev["url"] == "b.html"
+        assert prev["url"] == "b/"
         assert nxt is None
 
     def test_single_image_gets_none(self, tmp_path):
@@ -394,9 +394,9 @@ class TestPrevNextNavigation:
 
         build(parent, _site_config(), source, target)
 
-        assert (target / "a.html").read_text() == "prev=none|next=b.html"
-        assert (target / "b.html").read_text() == "prev=a.html|next=c.html"
-        assert (target / "c.html").read_text() == "prev=b.html|next=none"
+        assert (target / "a" / "index.html").read_text() == "prev=none|next=b/"
+        assert (target / "b" / "index.html").read_text() == "prev=a/|next=c/"
+        assert (target / "c" / "index.html").read_text() == "prev=b/|next=none"
 
 
 # ===========================================================================
@@ -503,10 +503,10 @@ class TestDryRun:
             tree, _site_config(), source, target, dry_run=True, verbose=True
         )
 
-        assert not (target / "photo.html").exists()
-        assert not (target / "photo.jpg").exists()
-        assert target / "photo.html" in expected
-        assert target / "photo.jpg" in expected
+        assert not (target / "photo" / "index.html").exists()
+        assert not (target / "photo" / "photo.jpg").exists()
+        assert target / "photo" / "index.html" in expected
+        assert target / "photo" / "photo.jpg" in expected
 
         err = capsys.readouterr().err
         assert "Would build:" in err

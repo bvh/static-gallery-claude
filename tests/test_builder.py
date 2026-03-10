@@ -70,7 +70,7 @@ class TestBuildMarkdown:
         )
         build(tree, _site_config(), source, target)
 
-        output = (target / "test.html").read_text()
+        output = (target / "test" / "index.html").read_text()
         assert "site=Test Site" in output
         assert "page=Jane" in output
         assert "content=" in output
@@ -91,7 +91,7 @@ class TestBuildMarkdown:
         )
         build(tree, _site_config(), source, target)
 
-        output = (target / "test.html").read_text()
+        output = (target / "test" / "index.html").read_text()
         assert output.startswith("Static Gallery ")
         # Version should be a dotted number like 0.1.0
         version = output.split(" ", 2)[2].strip()
@@ -112,7 +112,7 @@ class TestBuildMarkdown:
         )
         build(tree, _site_config(), source, target)
 
-        output = (target / "gallery.html").read_text()
+        output = (target / "gallery" / "index.html").read_text()
         assert "<img src=" in output
 
     def test_no_front_matter(self, tmp_path):
@@ -130,7 +130,7 @@ class TestBuildMarkdown:
         )
         build(tree, _site_config(), source, target)
 
-        output = (target / "plain.html").read_text()
+        output = (target / "plain" / "index.html").read_text()
         assert "Just some text." in output
 
 
@@ -150,11 +150,11 @@ class TestBuildImage:
         )
         build(tree, _site_config(), source, target)
 
-        html = (target / "photo.html").read_text()
+        html = (target / "photo" / "index.html").read_text()
         assert "<title>Photo</title>" in html
         assert 'src="photo.jpg"' in html
 
-        assert (target / "photo.jpg").read_bytes() == b"fake image data"
+        assert (target / "photo" / "photo.jpg").read_bytes() == b"fake image data"
 
     def test_title_from_stem(self, tmp_path):
         source = tmp_path / "source"
@@ -171,7 +171,7 @@ class TestBuildImage:
         )
         build(tree, _site_config(), source, target)
 
-        html = (target / "my-cool_photo.html").read_text()
+        html = (target / "my-cool_photo" / "index.html").read_text()
         assert "<title>My Cool Photo</title>" in html
 
 
@@ -305,7 +305,7 @@ class TestShortcodeIntegration:
         )
         build(tree, _site_config(), source, target)
 
-        output = (target / "post.html").read_text()
+        output = (target / "post" / "index.html").read_text()
         assert '<img src="photo.jpg"' in output
 
     def test_code_shortcode_in_markdown(self, tmp_path):
@@ -324,7 +324,7 @@ class TestShortcodeIntegration:
         )
         build(tree, _site_config(), source, target)
 
-        output = (target / "post.html").read_text()
+        output = (target / "post" / "index.html").read_text()
         assert "language-python" in output
         assert "print(" in output
 
@@ -454,8 +454,8 @@ class TestIncrementalBuild:
         tree = _make_tree(_make_child(NodeType.IMAGE, "photo", img))
         build(tree, _site_config(), source, target, config_path=conf)
 
-        html = target / "photo.html"
-        asset = target / "photo.jpg"
+        html = target / "photo" / "index.html"
+        asset = target / "photo" / "photo.jpg"
         _set_mtime(html, PAST + 500)
         _set_mtime(asset, PAST + 500)
 
@@ -531,7 +531,7 @@ class TestIncrementalBuild:
 
         tree = _make_tree(_make_child(NodeType.MARKDOWN, "post", md))
         build(tree, _site_config(), source, target, config_path=conf)
-        html = target / "post.html"
+        html = target / "post" / "index.html"
         assert html.exists()
         _set_mtime(html, PAST + 500)
 
@@ -552,7 +552,7 @@ class TestIncrementalBuild:
 
         tree = _make_tree(_make_child(NodeType.MARKDOWN, "post", md))
         build(tree, _site_config(), source, target, config_path=conf)
-        html = target / "post.html"
+        html = target / "post" / "index.html"
         _set_mtime(html, PAST + 500)
 
         # Rebuild with nothing changed — should skip
@@ -582,6 +582,173 @@ class TestIncrementalBuild:
         sync_target(target, expected)
         assert not stale.exists()
         assert (target / "index.html").exists()
+
+
+class TestPrettyURLCollision:
+    def test_markdown_falls_back_when_sibling_dir_exists(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source)
+
+        md = source / "about.md"
+        md.write_text("Title: About\n\nAbout page.")
+        sub_md = source / "details.md"
+        sub_md.write_text("Title: Details\n\nDetails.")
+
+        about_dir = Node(node_type=None, name="about", source=None, parent=None)
+        details = _make_child(NodeType.MARKDOWN, "details", sub_md, parent=about_dir)
+        about_dir.children.append(details)
+        about_md = _make_child(NodeType.MARKDOWN, "about", md)
+        tree = _make_tree(about_dir, about_md)
+
+        build(tree, _site_config(), source, target)
+
+        # Collision: about.md falls back to about.html (not about/index.html)
+        assert (target / "about.html").exists()
+        about_html = (target / "about.html").read_text()
+        assert "About page." in about_html
+
+    def test_image_falls_back_when_sibling_dir_exists(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source)
+
+        img = source / "photo.jpg"
+        img.write_bytes(b"fake image data")
+        sub_md = source / "info.md"
+        sub_md.write_text("Title: Info\n\nInfo.")
+
+        photo_dir = Node(node_type=None, name="photo", source=None, parent=None)
+        info = _make_child(NodeType.MARKDOWN, "info", sub_md, parent=photo_dir)
+        photo_dir.children.append(info)
+        photo_img = _make_child(NodeType.IMAGE, "photo", img)
+        tree = _make_tree(photo_dir, photo_img)
+
+        build(tree, _site_config(), source, target)
+
+        # Collision: image falls back to photo.html, asset at root level
+        assert (target / "photo.html").exists()
+        assert (target / "photo.jpg").exists()
+
+    def test_no_collision_without_sibling_dir(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source)
+
+        md = source / "about.md"
+        md.write_text("Title: About\n\nAbout page.")
+
+        tree = _make_tree(_make_child(NodeType.MARKDOWN, "about", md))
+        build(tree, _site_config(), source, target)
+
+        # No collision: pretty URL
+        assert (target / "about" / "index.html").exists()
+        assert not (target / "about.html").exists()
+
+    def test_listing_urls_use_html_on_collision(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        listing = (
+            "{% for p in children.pages %}page:{{ p.url }} {% endfor %}"
+            "{% for i in children.images %}img:{{ i.url }} {% endfor %}"
+        )
+        _setup_theme(source, listing=listing)
+
+        md = source / "about.md"
+        md.write_text("Title: About\n\nAbout page.")
+        img = source / "photo.jpg"
+        img.write_bytes(b"fake image data")
+
+        # Sibling dirs with children cause collisions
+        about_dir = Node(node_type=None, name="about", source=None, parent=None)
+        about_dir.children.append(
+            _make_child(NodeType.STATIC, "x", source / "about.md", parent=about_dir)
+        )
+        photo_dir = Node(node_type=None, name="photo", source=None, parent=None)
+        photo_dir.children.append(
+            _make_child(NodeType.STATIC, "x", source / "photo.jpg", parent=photo_dir)
+        )
+        about_md = _make_child(NodeType.MARKDOWN, "about", md)
+        photo_img = _make_child(NodeType.IMAGE, "photo", img)
+
+        parent = Node(node_type=None, name="gallery", source=None, parent=None)
+        for child in [about_dir, photo_dir, about_md, photo_img]:
+            child.parent = parent
+            parent.children.append(child)
+        tree = _make_tree(parent)
+
+        build(tree, _site_config(), source, target)
+
+        content = (target / "gallery" / "index.html").read_text()
+        assert "page:about.html" in content
+        assert "img:photo.html" in content
+
+    def test_listing_urls_use_slash_without_collision(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        listing = (
+            "{% for p in children.pages %}page:{{ p.url }} {% endfor %}"
+            "{% for i in children.images %}img:{{ i.url }} {% endfor %}"
+        )
+        _setup_theme(source, listing=listing)
+
+        md = source / "about.md"
+        md.write_text("Title: About\n\nAbout page.")
+        img = source / "photo.jpg"
+        img.write_bytes(b"fake image data")
+
+        parent = Node(node_type=None, name="gallery", source=None, parent=None)
+        about_md = _make_child(NodeType.MARKDOWN, "about", md, parent=parent)
+        photo_img = _make_child(NodeType.IMAGE, "photo", img, parent=parent)
+        parent.children.extend([about_md, photo_img])
+        tree = _make_tree(parent)
+
+        build(tree, _site_config(), source, target)
+
+        content = (target / "gallery" / "index.html").read_text()
+        assert "page:about/" in content
+        assert "img:photo/" in content
+
+    def test_nav_urls_use_html_on_collision(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        tpl = "prev={{ prev.url if prev else 'none' }}|next={{ next.url if next else 'none' }}"
+        _setup_theme(source, image=tpl)
+
+        a_img = source / "a.jpg"
+        a_img.write_bytes(b"fake")
+        b_img = source / "b.jpg"
+        b_img.write_bytes(b"fake")
+
+        parent = Node(node_type=None, name="", source=None, parent=None)
+        # "a" has a sibling directory collision
+        a_dir = Node(node_type=None, name="a", source=None, parent=parent)
+        a_dir.children.append(_make_child(NodeType.STATIC, "x", a_img, parent=a_dir))
+        a_node = _make_child(NodeType.IMAGE, "a", a_img, parent=parent)
+        b_node = _make_child(NodeType.IMAGE, "b", b_img, parent=parent)
+        parent.children.extend([a_dir, a_node, b_node])
+
+        build(parent, _site_config(), source, target)
+
+        # b's prev link to a should use .html (collision)
+        b_html = (target / "b" / "index.html").read_text()
+        assert "prev=a.html" in b_html
+
+        # a's next link to b should use / (no collision)
+        a_html = (target / "a.html").read_text()
+        assert "next=b/" in a_html
 
 
 class TestAutoIndex:
@@ -888,7 +1055,7 @@ class TestImageMetadata:
         ):
             build(tree, _site_config(), source, target)
 
-        html = (target / "sunset.html").read_text()
+        html = (target / "sunset" / "index.html").read_text()
         assert "<title>Sunset Over Water</title>" in html
 
     def test_image_page_metadata_in_template(self, tmp_path):
@@ -911,7 +1078,7 @@ class TestImageMetadata:
         ):
             build(tree, _site_config(), source, target)
 
-        output = (target / "sunset.html").read_text()
+        output = (target / "sunset" / "index.html").read_text()
         assert "Sunset Over Water" in output
         assert "Portland" in output
         assert "400" in output
@@ -963,7 +1130,7 @@ class TestImageMetadata:
         ):
             build(tree, _site_config(), source, target)
 
-        html = (target / "my-cool_photo.html").read_text()
+        html = (target / "my-cool_photo" / "index.html").read_text()
         assert "<title>My Cool Photo</title>" in html
 
 

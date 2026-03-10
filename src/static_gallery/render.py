@@ -23,7 +23,7 @@ from static_gallery.metadata import (
 from static_gallery.shortcodes import expand_shortcodes
 from static_gallery.errors import GalleryError
 from static_gallery.model import IMAGE_EXTENSIONS, Node, NodeType
-from static_gallery.paths import node_segments
+from static_gallery.paths import has_sibling_dir, node_segments
 
 _ISO_FORMATS = [
     "%Y-%m-%dT%H:%M:%SZ",
@@ -107,21 +107,30 @@ def _collect_children_data(
                         title = fm["title"]
                 except OSError:
                     pass
-            url = child.name + ("/" if child.is_index else ".html")
+            if has_sibling_dir(child):
+                url = child.name + ".html"
+            else:
+                url = child.name + "/"
             pages.append({"name": child.name, "title": title, "url": url})
         elif child.node_type == NodeType.IMAGE:
             stem = child.source.stem
             image_meta = get_image_metadata(child.source, meta_cache)
             title = resolve_title(stem, image_meta)
             alt = resolve_alt(stem, image_meta)
+            if has_sibling_dir(child):
+                url = child.name + ".html"
+                src = child.source.name
+            else:
+                url = child.name + "/"
+                src = child.name + "/" + child.source.name
             images.append(
                 {
                     "filename": child.source.name,
                     "stem": stem,
                     "title": title,
                     "alt": alt,
-                    "url": child.name + ".html",
-                    "src": child.source.name,
+                    "url": url,
+                    "src": src,
                     **image_meta,
                 }
             )
@@ -143,8 +152,12 @@ def _image_siblings(
     def _nav(n: Node) -> dict[str, str]:
         stem = n.source.stem
         meta = get_image_metadata(n.source, meta_cache)
+        if has_sibling_dir(n):
+            url = n.name + ".html"
+        else:
+            url = n.name + "/"
         return {
-            "url": n.name + ".html",
+            "url": url,
             "title": resolve_title(stem, meta),
             "src": n.source.name,
         }
@@ -294,9 +307,11 @@ def _node_url(node: Node, site_url: str) -> str:
     segs = node_segments(node)
     if node.is_index:
         rel = "/".join(segs) + "/" if segs else ""
-    else:
+    elif has_sibling_dir(node):
         parent = segs[:-1]
         rel = "/".join(parent + [node.name + ".html"])
+    else:
+        rel = "/".join(segs) + "/"
     return site_url + rel
 
 
