@@ -1,10 +1,18 @@
+import datetime
+
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+
+import os
+
+import pytest
 
 from static_gallery.metadata import (
     copy_image_stripped,
     get_image_metadata,
     read_image_metadata,
+    resolve_date,
+    resolve_date_iso,
     resolve_title,
     resolve_alt,
     _shorten_key,
@@ -258,3 +266,49 @@ class TestCopyImageStripped:
         # Editing metadata should be gone
         assert "LensModel" not in meta["exif"]
         assert "Make" not in meta["exif"]
+
+
+class TestResolveDate:
+    def test_uses_exif(self, tmp_path):
+        f = tmp_path / "photo.jpg"
+        f.write_bytes(b"fake")
+        meta = {
+            "exif": {"DateTimeOriginal": "2020:06:15 10:30:00"},
+            "iptc": {},
+            "xmp": {},
+        }
+        ts = resolve_date(f, meta)
+        expected = datetime.datetime(2020, 6, 15, 10, 30, 0).timestamp()
+        assert ts == expected
+
+    def test_falls_back_to_mtime(self, tmp_path):
+        f = tmp_path / "photo.jpg"
+        f.write_bytes(b"fake")
+        meta = {"exif": {}, "iptc": {}, "xmp": {}}
+        ts = resolve_date(f, meta)
+        assert ts == pytest.approx(os.path.getmtime(f), abs=1)
+
+    def test_bad_format_falls_back(self, tmp_path):
+        f = tmp_path / "photo.jpg"
+        f.write_bytes(b"fake")
+        meta = {"exif": {"DateTimeOriginal": "not-a-date"}, "iptc": {}, "xmp": {}}
+        ts = resolve_date(f, meta)
+        assert ts == pytest.approx(os.path.getmtime(f), abs=1)
+
+
+class TestResolveDateIso:
+    def test_returns_iso_from_exif(self):
+        meta = {
+            "exif": {"DateTimeOriginal": "2024:03:15 10:30:00"},
+            "iptc": {},
+            "xmp": {},
+        }
+        assert resolve_date_iso(meta) == "2024-03-15T10:30:00Z"
+
+    def test_returns_none_without_exif(self):
+        meta = {"exif": {}, "iptc": {}, "xmp": {}}
+        assert resolve_date_iso(meta) is None
+
+    def test_returns_none_for_invalid_date(self):
+        meta = {"exif": {"DateTimeOriginal": "not-a-date"}, "iptc": {}, "xmp": {}}
+        assert resolve_date_iso(meta) is None

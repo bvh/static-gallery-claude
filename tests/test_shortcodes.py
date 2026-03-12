@@ -3,6 +3,7 @@ from pathlib import Path
 import jinja2
 import pytest
 
+from conftest import EMPTY_META as _EMPTY_META
 from static_gallery.errors import GalleryError
 from static_gallery.shortcodes import expand_shortcodes, shortcode_dependencies
 
@@ -40,15 +41,42 @@ def src(tmp_path):
     return d
 
 
-_EMPTY_META = {"exif": {}, "iptc": {}, "xmp": {}}
-
-
 def _img(src, name="photo.jpg", meta_cache=None):
     f = src / name
     f.write_bytes(b"fake")
     if meta_cache is not None:
         meta_cache[f] = _EMPTY_META
     return f
+
+
+class TestShortcodeEscaping:
+    def test_escaped_produces_literal(self, env, src):
+        result = expand_shortcodes("\\<<not a shortcode>>", env, src, source_root=src)
+        assert result == "<<not a shortcode>>"
+
+    def test_mixed_escaped_and_real(self, env, src):
+        _img(src)
+        result = expand_shortcodes(
+            "\\<<literal>> and <<photo.jpg>>", env, src, source_root=src
+        )
+        assert "<<literal>>" in result
+        assert '<img src="photo.jpg"' in result
+
+    def test_multiple_escaped(self, env, src):
+        result = expand_shortcodes("\\<<a>> then \\<<b>>", env, src, source_root=src)
+        assert result == "<<a>> then <<b>>"
+
+    def test_dependencies_skip_escaped(self, src):
+        (src / "example.py").write_text("print('hi')")
+        body = "\\<<example.py>> and <<example.py>>"
+        deps = shortcode_dependencies(body, src)
+        assert deps == {src / "example.py"}
+
+    def test_dependencies_only_escaped(self, src):
+        (src / "example.py").write_text("print('hi')")
+        body = "\\<<example.py>>"
+        deps = shortcode_dependencies(body, src)
+        assert deps == set()
 
 
 class TestImageShortcodes:
@@ -246,6 +274,46 @@ class TestGalleryShortcode:
             "<<gallery sort=date reverse>>", env, src, meta_cache=mc, source_root=src
         )
         assert result == "new.jpg:new/,old.jpg:old/"
+
+    def test_sort_date_uses_exif(self, env, src):
+        mc = {}
+        # "old" by filename but newer by EXIF date
+        _img(src, "alpha.jpg", mc)
+        _img(src, "beta.jpg", mc)
+        # alpha has a newer EXIF date than beta
+        mc[src / "alpha.jpg"] = {
+            "exif": {"DateTimeOriginal": "2025:01:01 12:00:00"},
+            "iptc": {},
+            "xmp": {},
+        }
+        mc[src / "beta.jpg"] = {
+            "exif": {"DateTimeOriginal": "2020:01:01 12:00:00"},
+            "iptc": {},
+            "xmp": {},
+        }
+        result = expand_shortcodes(
+            "<<gallery sort=date>>", env, src, meta_cache=mc, source_root=src
+        )
+        assert result == "beta.jpg:beta/,alpha.jpg:alpha/"
+
+    def test_sort_date_reverse_with_exif(self, env, src):
+        mc = {}
+        _img(src, "alpha.jpg", mc)
+        _img(src, "beta.jpg", mc)
+        mc[src / "alpha.jpg"] = {
+            "exif": {"DateTimeOriginal": "2025:01:01 12:00:00"},
+            "iptc": {},
+            "xmp": {},
+        }
+        mc[src / "beta.jpg"] = {
+            "exif": {"DateTimeOriginal": "2020:01:01 12:00:00"},
+            "iptc": {},
+            "xmp": {},
+        }
+        result = expand_shortcodes(
+            "<<gallery sort=date reverse>>", env, src, meta_cache=mc, source_root=src
+        )
+        assert result == "alpha.jpg:alpha/,beta.jpg:beta/"
 
     def test_filter(self, env, src):
         mc = {}

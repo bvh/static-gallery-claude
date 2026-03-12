@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -9,31 +10,29 @@ from static_gallery.model import Node, NodeType
 
 from conftest import (
     LISTING_TEMPLATE,
+    make_child as _make_child,
+    make_index_tree as _make_index_tree,
+    make_tree as _make_tree,
     setup_theme as _setup_theme,
+    site_config as _site_config,
 )
 
-
-def _site_config():
-    return {"title": "Test Site", "url": "https://example.com/", "language": "en-us"}
-
-
-def _make_tree(*children):
-    root = Node(node_type=None, name="", source=None, parent=None)
-    for c in children:
-        c.parent = root
-        root.children.append(c)
-    return root
-
-
-def _make_index_tree(source, *children):
-    root = _make_tree(*children)
-    root.node_type = NodeType.MARKDOWN
-    root.source = source
-    return root
-
-
-def _make_child(node_type, name, source, parent=None):
-    return Node(node_type=node_type, name=name, source=source, parent=parent)
+FEED_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>{{ site.title }}</title>
+  <link href="{{ site.url }}" rel="alternate"/>
+  <link href="{{ site.url }}feed.xml" rel="self"/>
+  <id>{{ site.url }}</id>
+  {% if items %}<updated>{{ items[0].date }}</updated>{% endif %}
+  {% for item in items %}
+  <entry>
+    <title>{{ item.title }}</title>
+    <link href="{{ item.url }}" rel="alternate"/>
+    <id>{{ item.url }}</id>
+    <updated>{{ item.date }}</updated>
+  </entry>
+  {% endfor %}
+</feed>"""
 
 
 class TestBuildMarkdown:
@@ -212,80 +211,6 @@ class TestBuildStatic:
         build(tree, _site_config(), source, target)
 
         assert (target / "assets" / "app.js").read_text() == "console.log('hi')"
-
-
-class TestTargetSync:
-    def test_stale_file_removed(self, tmp_path):
-        source = tmp_path / "source"
-        target = tmp_path / "target"
-        source.mkdir()
-        target.mkdir()
-        _setup_theme(source)
-
-        stale = target / "old.html"
-        stale.write_text("stale")
-
-        md_file = source / "index.md"
-        md_file.write_text("Title: Home\n\nHello.")
-
-        root = _make_index_tree(md_file)
-        expected = build(root, _site_config(), source, target)
-        sync_target(target, expected)
-
-        assert not stale.exists()
-        assert (target / "index.html").exists()
-
-    def test_empty_dirs_cleaned(self, tmp_path):
-        source = tmp_path / "source"
-        target = tmp_path / "target"
-        source.mkdir()
-        target.mkdir()
-        _setup_theme(source)
-
-        stale_dir = target / "old"
-        stale_dir.mkdir()
-        (stale_dir / "stale.html").write_text("stale")
-
-        md_file = source / "index.md"
-        md_file.write_text("Title: Home\n\nHello.")
-
-        root = _make_index_tree(md_file)
-        expected = build(root, _site_config(), source, target)
-        sync_target(target, expected)
-
-        assert not stale_dir.exists()
-
-    def test_nested_stale_dirs_cleaned(self, tmp_path):
-        source = tmp_path / "source"
-        target = tmp_path / "target"
-        source.mkdir()
-        target.mkdir()
-        _setup_theme(source)
-
-        stale_dir = target / "old" / "nested" / "deep"
-        stale_dir.mkdir(parents=True)
-        (stale_dir / "stale.html").write_text("stale")
-
-        md_file = source / "index.md"
-        md_file.write_text("Title: Home\n\nHello.")
-
-        root = _make_index_tree(md_file)
-        expected = build(root, _site_config(), source, target)
-        sync_target(target, expected)
-
-        assert not (target / "old").exists()
-
-    def test_target_root_not_removed(self, tmp_path):
-        source = tmp_path / "source"
-        target = tmp_path / "target"
-        source.mkdir()
-        target.mkdir()
-        _setup_theme(source)
-
-        expected = build(_make_tree(), _site_config(), source, target)
-        sync_target(target, expected)
-
-        assert target.exists()
 
 
 class TestShortcodeIntegration:
@@ -1134,25 +1059,469 @@ class TestImageMetadata:
         assert "<title>My Cool Photo</title>" in html
 
 
-class TestSyncTargetSymlinks:
-    def test_symlink_in_target_is_cleaned_up(self, tmp_path):
+class TestRealTitlesInListings:
+    def test_listing_uses_front_matter_title(self, tmp_path):
+        source = tmp_path / "source"
         target = tmp_path / "target"
+        source.mkdir()
         target.mkdir()
-        real_file = tmp_path / "real.txt"
-        real_file.write_text("hello")
-        link = target / "stale.txt"
-        link.symlink_to(real_file)
+        _setup_theme(source, listing=LISTING_TEMPLATE)
 
-        sync_target(target, set())
+        md = source / "gallery" / "about.md"
+        md.parent.mkdir()
+        md.write_text("Title: About This Gallery\n\nInfo.")
 
-        assert not link.exists() and not link.is_symlink()
+        gallery = Node(node_type=None, name="gallery", source=None, parent=None)
+        md_child = _make_child(NodeType.MARKDOWN, "about", md, parent=gallery)
+        gallery.children.append(md_child)
+        tree = _make_tree(gallery)
 
-    def test_broken_symlink_in_target_is_cleaned_up(self, tmp_path):
+        build(tree, _site_config(), source, target)
+
+        content = (target / "gallery" / "index.html").read_text()
+        assert "page:About This Gallery" in content
+
+    def test_listing_falls_back_to_stem(self, tmp_path):
+        source = tmp_path / "source"
         target = tmp_path / "target"
+        source.mkdir()
         target.mkdir()
-        link = target / "broken.txt"
-        link.symlink_to(tmp_path / "nonexistent")
+        _setup_theme(source, listing=LISTING_TEMPLATE)
 
-        sync_target(target, set())
+        md = source / "gallery" / "my-page.md"
+        md.parent.mkdir()
+        md.write_text("\nNo front matter title.")
 
-        assert not link.is_symlink()
+        gallery = Node(node_type=None, name="gallery", source=None, parent=None)
+        md_child = _make_child(NodeType.MARKDOWN, "my-page", md, parent=gallery)
+        gallery.children.append(md_child)
+        tree = _make_tree(gallery)
+
+        build(tree, _site_config(), source, target)
+
+        content = (target / "gallery" / "index.html").read_text()
+        assert "page:My Page" in content
+
+
+class TestBreadcrumbsIntegration:
+    def test_breadcrumbs_in_template(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        tpl = "{% for c in breadcrumbs %}{{ c.name }}:{{ c.url }}{% if not loop.last %},{% endif %}{% endfor %}"
+        _setup_theme(source, page=tpl)
+
+        (source / "blog").mkdir()
+        md = source / "blog" / "post.md"
+        md.write_text("Title: Post\n\nHello.")
+
+        blog = Node(node_type=None, name="blog", source=None, parent=None)
+        child = _make_child(NodeType.MARKDOWN, "post", md, parent=blog)
+        blog.children.append(child)
+        tree = _make_tree(blog)
+
+        build(tree, _site_config(), source, target)
+
+        content = (target / "blog" / "post" / "index.html").read_text()
+        assert "Test Site:/" in content
+        assert "blog:/blog/" in content
+
+
+class TestPrevNextIntegration:
+    def test_prev_next_in_template(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        tpl = "prev={{ prev.url if prev else 'none' }}|next={{ next.url if next else 'none' }}"
+        _setup_theme(source, image=tpl)
+
+        parent = Node(node_type=None, name="", source=None, parent=None)
+        imgs = []
+        for name in ["a.jpg", "b.jpg", "c.jpg"]:
+            f = source / name
+            f.write_bytes(b"fake")
+            stem = Path(name).stem
+            child = _make_child(NodeType.IMAGE, stem, f, parent=parent)
+            parent.children.append(child)
+            imgs.append(child)
+
+        build(parent, _site_config(), source, target)
+
+        assert (target / "a" / "index.html").read_text() == "prev=none|next=b/"
+        assert (target / "b" / "index.html").read_text() == "prev=a/|next=c/"
+        assert (target / "c" / "index.html").read_text() == "prev=b/|next=none"
+
+
+class TestVerboseBuild:
+    def test_verbose_prints_build_messages(self, tmp_path, capsys):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source)
+
+        md = source / "index.md"
+        md.write_text("Title: Home\n\nHello.")
+
+        root = Node(node_type=NodeType.MARKDOWN, name="", source=md, parent=None)
+        build(root, _site_config(), source, target, verbose=True)
+
+        err = capsys.readouterr().err
+        assert "Build:" in err
+
+    def test_no_output_without_verbose(self, tmp_path, capsys):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source)
+
+        md = source / "index.md"
+        md.write_text("Title: Home\n\nHello.")
+
+        root = Node(node_type=NodeType.MARKDOWN, name="", source=md, parent=None)
+        build(root, _site_config(), source, target, verbose=False)
+
+        err = capsys.readouterr().err
+        assert "Build:" not in err
+
+
+class TestDryRun:
+    def test_produces_no_files(self, tmp_path, capsys):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source)
+
+        md = source / "index.md"
+        md.write_text("Title: Home\n\nHello.")
+
+        root = Node(node_type=NodeType.MARKDOWN, name="", source=md, parent=None)
+        expected = build(
+            root, _site_config(), source, target, dry_run=True, verbose=True
+        )
+
+        assert not (target / "index.html").exists()
+        assert target / "index.html" in expected
+
+        err = capsys.readouterr().err
+        assert "Would build:" in err
+
+    def test_image_no_files(self, tmp_path, capsys):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source)
+
+        img = source / "photo.jpg"
+        img.write_bytes(b"fake")
+
+        tree = _make_tree(_make_child(NodeType.IMAGE, "photo", img))
+        expected = build(
+            tree, _site_config(), source, target, dry_run=True, verbose=True
+        )
+
+        assert not (target / "photo" / "index.html").exists()
+        assert not (target / "photo" / "photo.jpg").exists()
+        assert target / "photo" / "index.html" in expected
+        assert target / "photo" / "photo.jpg" in expected
+
+        err = capsys.readouterr().err
+        assert "Would build:" in err
+
+    def test_expected_set_correct(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source)
+
+        md = source / "index.md"
+        md.write_text("Title: Home\n\nHello.")
+        css = source / "styles.css"
+        css.write_text("body {}")
+
+        root = Node(node_type=NodeType.MARKDOWN, name="", source=md, parent=None)
+        root.children.append(_make_child(NodeType.STATIC, "styles", css))
+        root.children[-1].parent = root
+
+        expected_dry = build(root, _site_config(), source, target, dry_run=True)
+        expected_real = build(root, _site_config(), source, target, dry_run=False)
+
+        assert expected_dry == expected_real
+
+
+def _setup_theme_with_feed(source, **kwargs):
+    _setup_theme(source, **kwargs)
+    (source / ".theme" / "feed.xml").write_text(FEED_TEMPLATE)
+
+
+class TestBuildFeed:
+    def test_generates_feed_with_dated_markdown(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme_with_feed(source)
+
+        md = source / "post.md"
+        md.write_text("Title: My Post\nDate: 2024-03-15T10:00:00Z\n\nContent here.")
+
+        tree = _make_tree(_make_child(NodeType.MARKDOWN, "post", md))
+        build(tree, _site_config(), source, target)
+
+        feed = target / "feed.xml"
+        assert feed.exists()
+        content = feed.read_text()
+        assert "<title>My Post</title>" in content
+        assert "https://example.com/post/" in content
+        assert "2024-03-15T10:00:00Z" in content
+
+    def test_excludes_undated_markdown(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme_with_feed(source)
+
+        md = source / "about.md"
+        md.write_text("Title: About\n\nNo date here.")
+
+        tree = _make_tree(_make_child(NodeType.MARKDOWN, "about", md))
+        build(tree, _site_config(), source, target)
+
+        content = (target / "feed.xml").read_text()
+        assert "<entry>" not in content
+
+    def test_no_feed_without_template(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme(source)  # no feed template
+
+        md = source / "post.md"
+        md.write_text("Title: Post\nDate: 2024-01-01T00:00:00Z\n\nHi.")
+
+        tree = _make_tree(_make_child(NodeType.MARKDOWN, "post", md))
+        build(tree, _site_config(), source, target)
+
+        assert not (target / "feed.xml").exists()
+
+    def test_feed_survives_sync(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme_with_feed(source)
+
+        md = source / "post.md"
+        md.write_text("Title: Post\nDate: 2024-01-01T00:00:00Z\n\nHi.")
+
+        tree = _make_tree(_make_child(NodeType.MARKDOWN, "post", md))
+        expected = build(tree, _site_config(), source, target)
+        sync_target(target, expected)
+
+        assert (target / "feed.xml").exists()
+
+    def test_feed_sorted_by_date_descending(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme_with_feed(source)
+
+        old = source / "old.md"
+        old.write_text("Title: Old Post\nDate: 2024-01-01T00:00:00Z\n\nOld.")
+        new = source / "new.md"
+        new.write_text("Title: New Post\nDate: 2024-06-15T00:00:00Z\n\nNew.")
+
+        tree = _make_tree(
+            _make_child(NodeType.MARKDOWN, "old", old),
+            _make_child(NodeType.MARKDOWN, "new", new),
+        )
+        build(tree, _site_config(), source, target)
+
+        content = (target / "feed.xml").read_text()
+        new_pos = content.index("New Post")
+        old_pos = content.index("Old Post")
+        assert new_pos < old_pos
+
+    def test_feed_with_image_exif_date(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme_with_feed(source)
+
+        img = source / "sunset.jpg"
+        img.write_bytes(b"fake image data")
+
+        tree = _make_tree(_make_child(NodeType.IMAGE, "sunset", img))
+
+        meta = {
+            "exif": {"DateTimeOriginal": "2024:07:20 18:30:00"},
+            "iptc": {"ObjectName": "Golden Sunset"},
+            "xmp": {},
+        }
+        with patch("static_gallery.metadata.read_image_metadata", return_value=meta):
+            build(tree, _site_config(), source, target)
+
+        content = (target / "feed.xml").read_text()
+        assert "<title>Golden Sunset</title>" in content
+        assert "2024-07-20T18:30:00Z" in content
+        assert "https://example.com/sunset/" in content
+
+    def test_feed_excludes_image_without_exif_date(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme_with_feed(source)
+
+        img = source / "photo.jpg"
+        img.write_bytes(b"fake")
+
+        tree = _make_tree(_make_child(NodeType.IMAGE, "photo", img))
+
+        meta = {"exif": {}, "iptc": {}, "xmp": {}}
+        with patch("static_gallery.metadata.read_image_metadata", return_value=meta):
+            build(tree, _site_config(), source, target)
+
+        content = (target / "feed.xml").read_text()
+        assert "<entry>" not in content
+
+    def test_feed_limit(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme_with_feed(source)
+
+        children = []
+        for i in range(5):
+            md = source / f"post{i}.md"
+            md.write_text(
+                f"Title: Post {i}\nDate: 2024-01-{i + 1:02d}T00:00:00Z\n\nHi."
+            )
+            children.append(_make_child(NodeType.MARKDOWN, f"post{i}", md))
+
+        tree = _make_tree(*children)
+        config = {**_site_config(), "feed_limit": "3"}
+        build(tree, config, source, target)
+
+        content = (target / "feed.xml").read_text()
+        assert content.count("<entry>") == 3
+
+    def test_feed_index_md_url(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme_with_feed(source)
+
+        sub = source / "blog"
+        sub.mkdir()
+        md = sub / "index.md"
+        md.write_text("Title: Blog\nDate: 2024-05-01T00:00:00Z\n\nBlog content.")
+
+        blog_node = Node(
+            node_type=NodeType.MARKDOWN, name="blog", source=md, parent=None
+        )
+        tree = _make_tree(blog_node)
+        build(tree, _site_config(), source, target)
+
+        content = (target / "feed.xml").read_text()
+        assert "https://example.com/blog/" in content
+
+    def test_feed_nested_content(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme_with_feed(source)
+
+        (source / "blog").mkdir()
+        md = source / "blog" / "post.md"
+        md.write_text("Title: Nested\nDate: 2024-02-01T00:00:00Z\n\nNested post.")
+
+        blog = Node(node_type=None, name="blog", source=None, parent=None)
+        post = _make_child(NodeType.MARKDOWN, "post", md, parent=blog)
+        blog.children.append(post)
+        tree = _make_tree(blog)
+        build(tree, _site_config(), source, target)
+
+        content = (target / "feed.xml").read_text()
+        assert "https://example.com/blog/post/" in content
+
+    def test_date_only_format_normalized(self, tmp_path):
+        """Date: 2024-03-15 should be normalized to full ISO 8601."""
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme_with_feed(source)
+
+        md = source / "post.md"
+        md.write_text("Title: Post\nDate: 2024-03-15\n\nHi.")
+
+        tree = _make_tree(_make_child(NodeType.MARKDOWN, "post", md))
+        build(tree, _site_config(), source, target)
+
+        content = (target / "feed.xml").read_text()
+        assert "2024-03-15T00:00:00Z" in content
+
+    def test_unparseable_date_excluded(self, tmp_path):
+        """A date that can't be parsed should be silently excluded."""
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme_with_feed(source)
+
+        md = source / "post.md"
+        md.write_text("Title: Post\nDate: March 15, 2024\n\nHi.")
+
+        tree = _make_tree(_make_child(NodeType.MARKDOWN, "post", md))
+        build(tree, _site_config(), source, target)
+
+        content = (target / "feed.xml").read_text()
+        assert "<entry>" not in content
+
+    def test_invalid_feed_limit_raises(self, tmp_path):
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme_with_feed(source)
+
+        md = source / "post.md"
+        md.write_text("Title: Post\nDate: 2024-01-01\n\nHi.")
+
+        tree = _make_tree(_make_child(NodeType.MARKDOWN, "post", md))
+        config = {**_site_config(), "feed_limit": "all"}
+        with pytest.raises(GalleryError, match="Invalid feed_limit"):
+            build(tree, config, source, target)
+
+    def test_feed_xml_not_autoescaped(self, tmp_path):
+        """XML templates should not have HTML autoescape applied."""
+        source = tmp_path / "source"
+        target = tmp_path / "target"
+        source.mkdir()
+        target.mkdir()
+        _setup_theme_with_feed(source)
+
+        md = source / "post.md"
+        md.write_text("Title: Tom & Jerry\nDate: 2024-01-01T00:00:00Z\n\nHi.")
+
+        tree = _make_tree(_make_child(NodeType.MARKDOWN, "post", md))
+        build(tree, _site_config(), source, target)
+
+        content = (target / "feed.xml").read_text()
+        # Should be raw & not &amp; since autoescape is off for .xml
+        assert "Tom & Jerry" in content
+        assert "Tom &amp; Jerry" not in content
