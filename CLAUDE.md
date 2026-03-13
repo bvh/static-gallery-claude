@@ -8,9 +8,10 @@ Static Gallery is a static site generator in Python with first-class image/galle
 
 ## Commands
 
-- **Run**: `uv run gallery` (CLI flags: `--source`, `--target`, `--config`, `--theme`, `--force`, `--stage`, `--port`)
+- **Run**: `uv run gallery` (CLI flags: `--source`, `--target`, `--config`, `--theme`, `--force`, `--stage`, `--port`, `--verbose`/`-v`, `--dry-run`)
 - **Run tests**: `uv run pytest`
 - **Run a single test**: `uv run pytest tests/test_scanner.py::test_name` or `uv run pytest -k "keyword"`
+- **Lint/format**: `uv run ruff check` / `uv run ruff format` (enforced via pre-commit hook; run `uv run pre-commit install` after cloning)
 - **Python 3.14**, managed with **uv**
 
 ## Architecture
@@ -40,9 +41,22 @@ Static Gallery is a static site generator in Python with first-class image/galle
 - **Templates**: Loaded from `.theme/` at source root. Selected by type name (`page` for markdown, `image` for images). Markdown can override via `Type:` front matter key.
 - **Shortcode expansion**: Shortcodes are expanded in markdown body text before CommonMark parsing. File shortcodes resolve relative to the markdown file's source directory; the `<<gallery>>` directive scans for images in the source tree.
 - **Incremental builds**: Files are only rebuilt when source is newer than target. Template/config changes trigger full rebuilds. `--force` bypasses timestamp checks.
+- **Pretty URLs**: Content nodes (markdown, images) generate `name/index.html` instead of `name.html`, so URLs look like `/name/` rather than `/name.html`. Exception: if a sibling directory with the same name exists and has children, the node falls back to `name.html` to avoid collision. The `has_sibling_dir` check in `paths.py` controls this.
 - **Metadata caching**: Image metadata reads are cached per-path via a `meta_cache` dict passed through the build pipeline, avoiding redundant pyexiv2 calls.
 - **Theme static assets**: Files in `.theme/static/` are copied to the target root, preserving relative paths (e.g., `.theme/static/css/styles.css` → `target/css/styles.css`). They participate in incremental builds and are registered in `expected` so `sync_target` preserves them.
 - **Strict fail-fast**: Any error stops the build immediately via `GalleryError`.
+
+### Testing
+
+Tests are in `tests/`, organized by module (e.g., `test_scanner.py`, `test_builder.py`). `conftest.py` provides shared helpers:
+
+- `make_tree(*children)` / `make_index_tree(source, *children)` — build `Node` trees for unit tests
+- `make_child(node_type, name, source)` — create a single child node
+- `setup_theme(source, ...)` — create a `.theme/` directory with minimal templates (page, image, optional listing, shortcode templates)
+- `site_config()` — returns a standard test site config dict
+- Template constants: `PAGE_TEMPLATE`, `IMAGE_TEMPLATE`, `LISTING_TEMPLATE`, `SHORTCODE_IMAGE_TEMPLATE`, `SHORTCODE_CODE_TEMPLATE`
+
+Most tests use `tmp_path` (pytest fixture) to create isolated source/target directories with real files on disk.
 
 ### Dependencies
 
