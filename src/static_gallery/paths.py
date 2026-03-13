@@ -32,6 +32,24 @@ def has_sibling_dir(node: Node) -> bool:
     return False
 
 
+def content_rel_url(node: Node) -> str:
+    """Relative URL for a content node: 'name/' or 'name.html'."""
+    if has_sibling_dir(node):
+        return node.name + ".html"
+    return node.name + "/"
+
+
+def content_asset_src(node: Node) -> str:
+    """Relative src path for an image asset in listings.
+
+    Only valid for IMAGE nodes (which always have a source file).
+    """
+    assert node.source is not None
+    if has_sibling_dir(node):
+        return node.source.name
+    return node.name + "/" + node.source.name
+
+
 def target_paths(
     node: Node, target: Path, *, has_listing: bool = False
 ) -> tuple[Path | None, Path | None]:
